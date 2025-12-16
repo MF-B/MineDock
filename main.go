@@ -51,6 +51,28 @@ func main() {
 		})
 	})
 
+	// 启动容器
+	r.POST("/containers/:id/start", func(c *gin.Context) {
+		id := c.Param("id")
+
+		if err := cli.ContainerStart(context.Background(), id, container.StartOptions{}); err != nil {
+			c.JSON(500, gin.H{"error": "启动失败: " + err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"message": "✅ 容器已启动！"})
+	})
+
+	// 停止容器
+	r.POST("/containers/:id/stop", func(c *gin.Context) {
+		id := c.Param("id")
+
+		if err := cli.ContainerStop(context.Background(), id, container.StopOptions{}); err != nil {
+			c.JSON(500, gin.H{"error": "停止失败: " + err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"message": "🛑 容器已停止！"})
+	})
+
 	// 4. 启动服务器，监听 8080 端口
 	r.Run(":8080")
 }
