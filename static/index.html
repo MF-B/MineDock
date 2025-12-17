@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <title>MineDock 控制台</title>
+    <link rel="stylesheet" href="//unpkg.com/element-plus/dist/index.css" />
+    <script src="//unpkg.com/vue@3"></script>
+    <script src="//unpkg.com/element-plus"></script>
+    <script src="//unpkg.com/@element-plus/icons-vue"></script>
+
+    <style>
+        body {
+            background-color: #f5f7fa;
+            padding: 20px;
+            font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', sans-serif;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .card-header {
+            font-weight: bold;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        .running {
+            background-color: #67C23A;
+        }
+
+        .exited {
+            background-color: #909399;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <div class="header">
+            <h2>🎮 MineDock Server Manager</h2>
+            <el-button type="primary" :icon="Refresh" @click="fetchContainers" circle></el-button>
+        </div>
+
+        <el-card>
+            <template #header>
+                <div class="card-header">
+                    <span>容器列表</span>
+                </div>
+            </template>
+
+            <el-table :data="containers" style="width: 100%" v-loading="loading">
+
+                <el-table-column prop="names" label="容器名称" width="180">
+                    <template #default="scope">
+                        <el-tag effect="dark">{{ scope.row.names }}</el-tag>
+                    </template>
+                </el-table-column>
+
+                <el-table-column prop="image" label="镜像" width="220"></el-table-column>
+
+                <el-table-column label="状态" width="180">
+                    <template #default="scope">
+                        <span :class="['status-dot', scope.row.state == 'running' ? 'running' : 'exited']"></span>
+                        {{ scope.row.state }} ({{ scope.row.status }})
+                    </template>
+                </el-table-column>
+
+                <el-table-column label="操作">
+                    <template #default="scope">
+                        <el-button type="success" size="small" :disabled="scope.row.state === 'running'"
+                            @click="handleAction(scope.row.id, 'start')">
+                            启动
+                        </el-button>
+
+                        <el-button type="danger" size="small" :disabled="scope.row.state !== 'running'"
+                            @click="handleAction(scope.row.id, 'stop')">
+                            停止
+                        </el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </el-card>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+        const { ElMessage } = ElementPlus;
+        const { Refresh } = ElementPlusIconsVue;
+
+        const app = createApp({
+            setup() {
+                const containers = ref([]);
+                const loading = ref(false);
+
+                // 获取列表
+                const fetchContainers = () => {
+                    loading.value = true;
+                    fetch('/containers')
+                        .then(res => res.json())
+                        .then(data => {
+                            containers.value = data;
+                            loading.value = false;
+                        })
+                        .catch(err => {
+                            ElMessage.error('获取列表失败');
+                            loading.value = false;
+                        });
+                };
+
+                // 执行操作 (启动/停止)
+                const handleAction = (id, action) => {
+                    loading.value = true; // 操作时显示加载中
+                    fetch(`/containers/${id}/${action}`, { method: 'POST' })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.error) {
+                                ElMessage.error(data.error);
+                            } else {
+                                ElMessage.success(action === 'start' ? '启动指令已发送' : '停止指令已发送');
+                                // 延迟 1 秒刷新列表，等待 Docker 状态更新
+                                setTimeout(fetchContainers, 1000);
+                            }
+                        })
+                        .catch(err => {
+                            ElMessage.error('请求失败');
+                            loading.value = false;
+                        });
+                };
+
+                onMounted(() => {
+                    fetchContainers();
+                });
+
+                return {
+                    containers,
+                    loading,
+                    fetchContainers,
+                    handleAction,
+                    Refresh
+                };
+            }
+        });
+
+        app.use(ElementPlus);
+        // 注册图标
+        for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+            app.component(key, component)
+        }
+        app.mount('#app');
+    </script>
+</body>
+
+</html>

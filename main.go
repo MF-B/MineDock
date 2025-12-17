@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -20,35 +19,43 @@ func main() {
 	// 2. 初始化 Web 服务器 (Gin)
 	r := gin.Default()
 
-	// 3. 定义一个接口：GET /containers
+	// 定义一个简单的结构体，只返回前端需要的数据，保持清爽
+	type ContainerView struct {
+		ID     string `json:"id"`
+		Name   string `json:"names"` // 容器通常有多个名字，我们取第一个
+		Image  string `json:"image"`
+		State  string `json:"state"`  // running, exited...
+		Status string `json:"status"` // "Up 2 hours", "Exited (0) 5 seconds ago"
+	}
+
+	// 获取列表接口
 	r.GET("/containers", func(c *gin.Context) {
-		// 获取容器列表
+		// ListOptions{All: true} 表示列出所有容器，包括停止运行的
 		containers, err := cli.ContainerList(context.Background(), container.ListOptions{All: true})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
 
-		// 把复杂的 Docker 数据简化一下，只返回我们关心的
-		var simpleList []gin.H
-		for _, ctr := range containers {
-			name := "无名氏"
-			if len(ctr.Names) > 0 {
-				name = ctr.Names[0][1:] // 去掉开头的 /
+		// 把 Docker 的原始数据转换成我们定义的简单结构体
+		var viewList []ContainerView
+		for _, ctn := range containers {
+			name := "未知"
+			if len(ctn.Names) > 0 {
+				// Docker 的名字通常以 "/" 开头，去掉它才好看
+				name = ctn.Names[0][1:]
 			}
-			simpleList = append(simpleList, gin.H{
-				"id":     ctr.ID[:10],
-				"name":   name,
-				"status": ctr.State, // running 或 exited
-				"image":  ctr.Image,
+
+			viewList = append(viewList, ContainerView{
+				ID:     ctn.ID[:10], // ID 截取前10位就够了
+				Name:   name,
+				Image:  ctn.Image,
+				State:  ctn.State,
+				Status: ctn.Status,
 			})
 		}
 
-		// 返回 JSON 数据给浏览器
-		c.JSON(http.StatusOK, gin.H{
-			"code": 200,
-			"data": simpleList,
-		})
+		c.JSON(200, viewList)
 	})
 
 	// 启动容器
@@ -74,5 +81,6 @@ func main() {
 	})
 
 	// 4. 启动服务器，监听 8080 端口
+	r.StaticFile("/", "./static/index.html")
 	r.Run(":8080")
 }
