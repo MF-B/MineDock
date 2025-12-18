@@ -87,16 +87,86 @@
                             @click="handleAction(scope.row.id, 'stop')">
                             停止
                         </el-button>
+
+                        <el-button type="info" size="small" @click="openConsole(scope.row.id)">
+                            控制台
+                        </el-button>
                     </template>
                 </el-table-column>
             </el-table>
         </el-card>
+        <el-dialog v-model="logVisible" title="🔴 实时控制台" width="80%" :before-close="closeConsole">
+
+            <div ref="logBox"
+                style="background: #1e1e1e; color: #2ecc71; padding: 15px; height: 400px; overflow-y: auto; font-family: monospace; white-space: pre-wrap; font-size: 14px; border-radius: 5px;">
+                <div v-for="(line, index) in logs" :key="index" :style="line.style">
+                    {{ line.text }}
+                </div>
+            </div>
+        </el-dialog>
     </div>
 
     <script>
-        const { createApp, ref, onMounted } = Vue;
+        const { createApp, ref, onMounted, nextTick } = Vue;
         const { ElMessage } = ElementPlus;
         const { Refresh } = ElementPlusIconsVue;
+        const logVisible = ref(false); // 弹窗开关
+        const logs = ref([]);          // 存日志内容
+        const logBox = ref(null);      // 绑定 DOM 元素，用于自动滚动
+        let socket = null;             // WebSocket 实例
+
+        const openConsole = (id) => {
+            logs.value = []; // 清空旧日志
+            logVisible.value = true;
+
+            // 建立 WebSocket 连接
+            // 注意：如果是本地开发，地址是 ws://localhost:8080/containers/...
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${location.host}/containers/${id}/logs`;
+
+            socket = new WebSocket(wsUrl);
+
+            socket.onopen = () => {
+                logs.value.push(">>> 连接成功，正在接入神经元网络... <<<");
+            };
+
+            socket.onmessage = (event) => {
+                try {
+                    // 解析后端发来的 JSON
+                    const data = JSON.parse(event.data);
+
+                    // 根据类型给颜色
+                    let colorStyle = "color: #bdc3c7;"; // 默认浅灰色
+                    if (data.type === 'error') {
+                        colorStyle = "color: #ff5555;"; // 红色警告
+                    } else if (data.content.includes("INFO")) {
+                        colorStyle = "color: #2ecc71;"; // INFO 信息给绿色
+                    }
+
+                    // 用 HTML 也就是 v-html 或者直接拼 style 对象存入数组
+                    // 这里为了简单，我们存对象，改一下上面的 v-for
+                    logs.value.push({ text: data.content, style: colorStyle });
+
+                } catch (e) {
+                    // 万一解析失败（比如 Docker 发了非标准包），直接显示原文
+                    logs.value.push({ text: event.data, style: "color: #bdc3c7;" });
+                }
+
+                // 自动滚动...
+                nextTick(() => { /* ...保持不变... */ });
+            };
+
+            socket.onclose = () => {
+                logs.value.push(">>> 连接已断开 <<<");
+            };
+        };
+
+        const closeConsole = (done) => {
+            if (socket) {
+                socket.close(); // 关掉连接
+            }
+            done();
+        };
 
         const app = createApp({
             setup() {
@@ -147,7 +217,12 @@
                     loading,
                     fetchContainers,
                     handleAction,
-                    Refresh
+                    Refresh,
+                    logVisible,
+                    logs,
+                    logBox,
+                    openConsole,
+                    closeConsole
                 };
             }
         });

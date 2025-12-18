@@ -2,13 +2,27 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/gin-gonic/gin"
+
+	"bufio"
+
+	"github.com/gorilla/websocket"
 )
 
 func main() {
+	var upgrader = websocket.Upgrader{
+		// 允许跨域（为了方便开发，生产环境通常要限制）
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+
 	// 1. 初始化 Docker 客户端
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -80,7 +94,74 @@ func main() {
 		c.JSON(200, gin.H{"message": "🛑 容器已停止！"})
 	})
 
+	// 实时日志接口 (WebSocket)
+	r.GET("/containers/:id/logs", func(c *gin.Context) {
+		id := c.Param("id")
+
+		// 1. 升级连接：从 HTTP 变成 WebSocket
+		ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			return
+		}
+		defer ws.Close() // 结束时记得挂电话
+
+		// 2. 调用 Docker 获取日志流
+		// Follow: true 表示持续监听，ShowStdout/Stderr 表示标准输出和错误都要
+		reader, err := cli.ContainerLogs(context.Background(), id, container.LogsOptions{
+			ShowStdout: true,
+			ShowStderr: true,
+			Follow:     true,
+			Tail:       "50", // 刚打开时先看最后 50 行
+		})
+		if err != nil {
+			ws.WriteMessage(websocket.TextMessage, []byte("无法获取日志: "+err.Error()))
+			return
+		}
+		defer reader.Close()
+
+		// 3. 搬运工：不断从 Docker 读一行，往 WebSocket 写一行
+		scanner := bufio.NewScanner(reader)
+		for scanner.Scan() {
+			payload := scanner.Bytes()
+
+			// Docker 日志头有 8 个字节，只有长于 8 字节的才是有效内容
+			if len(payload) > 8 {
+				// 第 1 个字节是类型：1=stdout(正常), 2=stderr(错误)
+				streamType := payload[0]
+
+				// 切掉前 8 个字节的头，剩下的才是真正的日志文本
+				line := string(payload[8:])
+
+				// 我们构造一个简单的 JSON 发给前端，带上颜色信息
+				// 1=绿色/白色，2=红色
+				msgType := "info"
+				if streamType == 2 {
+					msgType = "error"
+				}
+
+				// 这里偷个懒，直接拼 JSON 字符串（或者你可以定义结构体用 json.Marshal）
+				// 注意：如果日志里有引号可能需要转义，但作为简单控制台先这样跑
+				jsonMsg := fmt.Sprintf(`{"type": "%s", "content": "%s"}`, msgType, cleanJsonString(line))
+
+				err := ws.WriteMessage(websocket.TextMessage, []byte(jsonMsg))
+				if err != nil {
+					break
+				}
+			}
+		}
+	})
+
 	// 4. 启动服务器，监听 8080 端口
 	r.StaticFile("/", "./static/index.html")
 	r.Run(":8080")
+}
+
+// 简单的字符串清洗，防止 JSON 格式错误
+func cleanJsonString(s string) string {
+	// 把双引号转义，把换行符去掉
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "\"", "\\\"")
+	s = strings.ReplaceAll(s, "\r", "")
+	s = strings.ReplaceAll(s, "\n", "")
+	return s
 }
