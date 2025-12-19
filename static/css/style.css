@@ -1,0 +1,33 @@
+/* static/css/style.css */
+body {
+    background-color: #f5f7fa;
+    padding: 20px;
+    font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', sans-serif;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.card-header {
+    font-weight: bold;
+}
+
+.status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 5px;
+}
+
+.running {
+    background-color: #67C23A;
+}
+
+.exited {
+    background-color: #909399;
+}

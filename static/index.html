@@ -5,44 +5,11 @@
     <meta charset="UTF-8">
     <title>MineDock 控制台</title>
     <link rel="stylesheet" href="//unpkg.com/element-plus/dist/index.css" />
+    <link rel="stylesheet" href="./css/style.css" />
+
     <script src="//unpkg.com/vue@3"></script>
     <script src="//unpkg.com/element-plus"></script>
     <script src="//unpkg.com/@element-plus/icons-vue"></script>
-
-    <style>
-        body {
-            background-color: #f5f7fa;
-            padding: 20px;
-            font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', sans-serif;
-        }
-
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .card-header {
-            font-weight: bold;
-        }
-
-        .status-dot {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            margin-right: 5px;
-        }
-
-        .running {
-            background-color: #67C23A;
-        }
-
-        .exited {
-            background-color: #909399;
-        }
-    </style>
 </head>
 
 <body>
@@ -54,186 +21,39 @@
 
         <el-card>
             <template #header>
-                <div class="card-header">
-                    <span>容器列表</span>
-                </div>
+                <div class="card-header"><span>容器列表</span></div>
             </template>
-
             <el-table :data="containers" style="width: 100%" v-loading="loading">
-
                 <el-table-column prop="names" label="容器名称" width="180">
-                    <template #default="scope">
-                        <el-tag effect="dark">{{ scope.row.names }}</el-tag>
-                    </template>
+                    <template #default="scope"><el-tag effect="dark">{{ scope.row.names }}</el-tag></template>
                 </el-table-column>
-
                 <el-table-column prop="image" label="镜像" width="220"></el-table-column>
-
                 <el-table-column label="状态" width="180">
                     <template #default="scope">
                         <span :class="['status-dot', scope.row.state == 'running' ? 'running' : 'exited']"></span>
                         {{ scope.row.state }} ({{ scope.row.status }})
                     </template>
                 </el-table-column>
-
                 <el-table-column label="操作">
                     <template #default="scope">
                         <el-button type="success" size="small" :disabled="scope.row.state === 'running'"
-                            @click="handleAction(scope.row.id, 'start')">
-                            启动
-                        </el-button>
-
+                            @click="handleAction(scope.row.id, 'start')">启动</el-button>
                         <el-button type="danger" size="small" :disabled="scope.row.state !== 'running'"
-                            @click="handleAction(scope.row.id, 'stop')">
-                            停止
-                        </el-button>
-
-                        <el-button type="info" size="small" @click="openConsole(scope.row.id)">
-                            控制台
-                        </el-button>
+                            @click="handleAction(scope.row.id, 'stop')">停止</el-button>
+                        <el-button type="info" size="small" @click="openConsole(scope.row.id)">控制台</el-button>
                     </template>
                 </el-table-column>
             </el-table>
         </el-card>
-        <el-dialog v-model="logVisible" title="🔴 实时控制台" width="80%" :before-close="closeConsole">
 
-            <div ref="logBox"
-                style="background: #1e1e1e; color: #2ecc71; padding: 15px; height: 400px; overflow-y: auto; font-family: monospace; white-space: pre-wrap; font-size: 14px; border-radius: 5px;">
-                <div v-for="(line, index) in logs" :key="index" :style="line.style">
-                    {{ line.text }}
-                </div>
+        <el-dialog v-model="logVisible" title="🔴 实时控制台" width="80%" :before-close="closeConsole">
+            <div ref="logBox" class="log-box">
+                <div v-for="(line, index) in logs" :key="index" :style="line.style">{{ line.text }}</div>
             </div>
         </el-dialog>
     </div>
 
-    <script>
-        const { createApp, ref, onMounted, nextTick } = Vue;
-        const { ElMessage } = ElementPlus;
-        const { Refresh } = ElementPlusIconsVue;
-        const logVisible = ref(false); // 弹窗开关
-        const logs = ref([]);          // 存日志内容
-        const logBox = ref(null);      // 绑定 DOM 元素，用于自动滚动
-        let socket = null;             // WebSocket 实例
-
-        const openConsole = (id) => {
-            logs.value = []; // 清空旧日志
-            logVisible.value = true;
-
-            // 建立 WebSocket 连接
-            // 注意：如果是本地开发，地址是 ws://localhost:8080/containers/...
-            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${location.host}/containers/${id}/logs`;
-
-            socket = new WebSocket(wsUrl);
-
-            socket.onopen = () => {
-                logs.value.push(">>> 连接成功，正在接入神经元网络... <<<");
-            };
-
-            socket.onmessage = (event) => {
-                try {
-                    // 解析后端发来的 JSON
-                    const data = JSON.parse(event.data);
-
-                    // 根据类型给颜色
-                    let colorStyle = "color: #bdc3c7;"; // 默认浅灰色
-                    if (data.type === 'error') {
-                        colorStyle = "color: #ff5555;"; // 红色警告
-                    } else if (data.content.includes("INFO")) {
-                        colorStyle = "color: #2ecc71;"; // INFO 信息给绿色
-                    }
-
-                    // 用 HTML 也就是 v-html 或者直接拼 style 对象存入数组
-                    // 这里为了简单，我们存对象，改一下上面的 v-for
-                    logs.value.push({ text: data.content, style: colorStyle });
-
-                } catch (e) {
-                    // 万一解析失败（比如 Docker 发了非标准包），直接显示原文
-                    logs.value.push({ text: event.data, style: "color: #bdc3c7;" });
-                }
-
-                // 自动滚动...
-                nextTick(() => { /* ...保持不变... */ });
-            };
-
-            socket.onclose = () => {
-                logs.value.push(">>> 连接已断开 <<<");
-            };
-        };
-
-        const closeConsole = (done) => {
-            if (socket) {
-                socket.close(); // 关掉连接
-            }
-            done();
-        };
-
-        const app = createApp({
-            setup() {
-                const containers = ref([]);
-                const loading = ref(false);
-
-                // 获取列表
-                const fetchContainers = () => {
-                    loading.value = true;
-                    fetch('/containers')
-                        .then(res => res.json())
-                        .then(data => {
-                            containers.value = data;
-                            loading.value = false;
-                        })
-                        .catch(err => {
-                            ElMessage.error('获取列表失败');
-                            loading.value = false;
-                        });
-                };
-
-                // 执行操作 (启动/停止)
-                const handleAction = (id, action) => {
-                    loading.value = true; // 操作时显示加载中
-                    fetch(`/containers/${id}/${action}`, { method: 'POST' })
-                        .then(res => res.json())
-                        .then(data => {
-                            if (data.error) {
-                                ElMessage.error(data.error);
-                            } else {
-                                ElMessage.success(action === 'start' ? '启动指令已发送' : '停止指令已发送');
-                                // 延迟 1 秒刷新列表，等待 Docker 状态更新
-                                setTimeout(fetchContainers, 1000);
-                            }
-                        })
-                        .catch(err => {
-                            ElMessage.error('请求失败');
-                            loading.value = false;
-                        });
-                };
-
-                onMounted(() => {
-                    fetchContainers();
-                });
-
-                return {
-                    containers,
-                    loading,
-                    fetchContainers,
-                    handleAction,
-                    Refresh,
-                    logVisible,
-                    logs,
-                    logBox,
-                    openConsole,
-                    closeConsole
-                };
-            }
-        });
-
-        app.use(ElementPlus);
-        // 注册图标
-        for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-            app.component(key, component)
-        }
-        app.mount('#app');
-    </script>
+    <script src="./js/app.js"></script>
 </body>
 
 </html>
