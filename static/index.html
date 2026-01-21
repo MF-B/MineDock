@@ -15,8 +15,13 @@
 <body>
     <div id="app">
         <div class="header">
-            <h2>🎮 MineDock Server Manager</h2>
-            <el-button type="primary" :icon="Refresh" @click="fetchContainers" circle></el-button>
+            <div class="title-group">
+                <h2>🎮 MineDock Server Manager</h2>
+            </div>
+            <div class="btn-group">
+                <el-button type="primary" :icon="Plus" @click="openCreateDialog">新建服务器</el-button>
+                <el-button :icon="Refresh" @click="fetchContainers" circle></el-button>
+            </div>
         </div>
 
         <el-card>
@@ -31,7 +36,7 @@
                 <el-table-column label="状态" width="180">
                     <template #default="scope">
                         <span :class="['status-dot', scope.row.state == 'running' ? 'running' : 'exited']"></span>
-                        {{ scope.row.state }} ({{ scope.row.status }})
+                        {{ scope.row.state }}
                     </template>
                 </el-table-column>
                 <el-table-column label="操作">
@@ -50,6 +55,56 @@
             <div ref="logBox" class="log-box">
                 <div v-for="(line, index) in logs" :key="index" :style="line.style">{{ line.text }}</div>
             </div>
+        </el-dialog>
+
+        <el-dialog v-model="createVisible" title="🛠️ 创建新服务器" width="600px">
+            <el-form label-position="top">
+                <el-row :gutter="20">
+                    <el-col :span="12">
+                        <el-form-item label="服务器名称">
+                            <el-input v-model="createForm.name" placeholder="例如: MyCreateServer"></el-input>
+                        </el-form-item>
+                    </el-col>
+                    <el-col :span="12">
+                        <el-form-item label="端口">
+                            <el-input v-model="createForm.port" placeholder="25565"></el-input>
+                        </el-form-item>
+                    </el-col>
+                </el-row>
+
+                <el-form-item label="数据目录 (宿主机绝对路径)">
+                    <el-input v-model="createForm.dataPath" placeholder="/home/user/minecraft/xxx"></el-input>
+                    <small style="color: gray">如果不填，数据将保存在 Docker 内部（不推荐）</small>
+                </el-form-item>
+
+                <el-form-item label="镜像名称 (选填)">
+                    <el-input v-model="createForm.image" placeholder="默认为 itzg/minecraft-server"></el-input>
+                </el-form-item>
+
+                <el-divider content-position="left">环境变量配置 (Environment)</el-divider>
+
+                <div v-for="(item, index) in createForm.envList" :key="index" style="margin-bottom: 10px;">
+                    <el-row :gutter="10">
+                        <el-col :span="10">
+                            <el-input v-model="item.key" placeholder="变量名 (如 MEMORY)"></el-input>
+                        </el-col>
+                        <el-col :span="10">
+                            <el-input v-model="item.value" placeholder="值 (如 4G)"></el-input>
+                        </el-col>
+                        <el-col :span="4">
+                            <el-button type="danger" :icon="Delete" circle @click="removeEnv(index)" />
+                        </el-col>
+                    </el-row>
+                </div>
+                <el-button style="width: 100%" @click="addEnv" :icon="Plus" plain>添加环境变量</el-button>
+
+            </el-form>
+            <template #footer>
+                <span class="dialog-footer">
+                    <el-button @click="createVisible = false">取消</el-button>
+                    <el-button type="primary" @click="submitCreate" :loading="creating">立即创建</el-button>
+                </span>
+            </template>
         </el-dialog>
     </div>
 

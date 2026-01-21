@@ -5,11 +5,15 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
@@ -112,4 +116,85 @@ func (h *Handler) StreamLogs(c *gin.Context) {
 			}
 		}
 	}
+}
+
+// CreateContainer 创建并启动一个新服务器
+func (h *Handler) CreateContainer(c *gin.Context) {
+	var req model.CreateRequest
+	// 1. 解析前端发来的 JSON
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "参数格式不对: " + err.Error()})
+		return
+	}
+
+	// 默认值处理（防止前端没传炸掉）
+	if req.Image == "" {
+		req.Image = "itzg/minecraft-server"
+	}
+	reader, err := h.Cli.ImagePull(context.Background(), req.Image, image.PullOptions{})
+	if err != nil {
+		// 如果拉取失败（比如没网，或者镜像名写错）
+		c.JSON(500, gin.H{"error": "拉取镜像失败: " + err.Error()})
+		return
+	}
+	io.Copy(os.Stdout, reader)
+	reader.Close()
+
+	envList := []string{
+		"EULA=TRUE",
+		"UID=1000",
+		"GID=1000",
+	}
+
+	for key, value := range req.Env {
+		envList = append(envList, key+"="+value)
+	}
+
+	// 2. 配置容器环境 (Config)
+	config := &container.Config{
+		Image:     req.Image,
+		Tty:       true,
+		OpenStdin: true,
+		Env:       envList, // 把拼好的列表塞进去
+	}
+
+	// 3. 配置宿主机挂载 (HostConfig)
+	// 3.1 端口映射: 把宿主机的 req.Port 映射到容器的 25565
+	hostBinding := nat.PortBinding{
+		HostIP:   "0.0.0.0",
+		HostPort: req.Port,
+	}
+	containerPort, _ := nat.NewPort("tcp", "25565")
+	portBinding := nat.PortMap{containerPort: []nat.PortBinding{hostBinding}}
+
+	// 3.2 目录挂载: 把你电脑上的 DataPath 挂载到容器里的 /data
+	// 如果 DataPath 为空，Docker 会自动创建一个匿名卷（不推荐）
+	binds := []string{}
+	if req.DataPath != "" {
+		binds = append(binds, req.DataPath+":/data")
+	}
+
+	hostConfig := &container.HostConfig{
+		PortBindings: portBinding,
+		Binds:        binds,
+		Resources:    container.Resources{
+			// 这里其实可以限制 CPU，暂时先不做
+		},
+		RestartPolicy: container.RestartPolicy{Name: "unless-stopped"}, // 除非手动停，否则崩了自动重启
+	}
+
+	// 4. 调用 Docker API 创建容器
+	resp, err := h.Cli.ContainerCreate(context.Background(), config, hostConfig, nil, nil, req.Name)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "创建失败: " + err.Error()})
+		return
+	}
+
+	// 5. 顺手把它启动了
+	if err := h.Cli.ContainerStart(context.Background(), resp.ID, container.StartOptions{}); err != nil {
+		c.JSON(500, gin.H{"error": "创建成功但启动失败: " + err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "✅ 服务器创建并启动成功！", "id": resp.ID})
 }

@@ -31,6 +31,7 @@ func main() {
 	r.POST("/containers/:id/start", handler.StartContainer)
 	r.POST("/containers/:id/stop", handler.StopContainer)
 	r.GET("/containers/:id/logs", handler.StreamLogs)
+	r.POST("/containers/create", handler.CreateContainer)
 
 	// 启动
 	r.Run(":8080")

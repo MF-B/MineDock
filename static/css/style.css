@@ -1,33 +1,188 @@
 /* static/css/style.css */
+
+/* --- 1. 全局基础样式 (深色模式) --- */
 body {
-    background-color: #f5f7fa;
-    padding: 20px;
+    background-color: #1e1e1e;
+    /* VSCode 风格的深灰背景 */
+    color: #cfd3dc;
+    /* 柔和的灰白色文字 */
     font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', sans-serif;
+    padding: 20px;
+    margin: 0;
 }
 
+#app {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* --- 2. 顶部导航栏 (Flex 布局优化) --- */
 .header {
     display: flex;
     justify-content: space-between;
+    /* 两端对齐：标题在左，按钮在右 */
     align-items: center;
-    margin-bottom: 20px;
+    margin-bottom: 24px;
+    padding: 0 10px;
 }
 
-.card-header {
+.title-group h2 {
+    margin: 0;
+    color: #fff;
+    font-size: 24px;
+    letter-spacing: 1px;
+    /* 给标题加一点点霓虹光晕效果 */
+    text-shadow: 0 0 10px rgba(64, 158, 255, 0.5);
+}
+
+.btn-group {
+    display: flex;
+    gap: 12px;
+    /* 按钮之间的间距 */
+}
+
+/* --- 3. Element Plus 组件深度覆盖 (强制深色化) --- */
+
+/* 卡片背景 */
+.el-card {
+    background-color: #2b2b2b !important;
+    border: 1px solid #4c4d4f !important;
+    color: #fff !important;
+}
+
+.el-card__header {
+    border-bottom: 1px solid #4c4d4f !important;
+    padding: 15px 20px;
+}
+
+.card-header span {
     font-weight: bold;
+    font-size: 16px;
 }
 
+/* 表格样式覆盖 */
+.el-table {
+    --el-table-bg-color: #2b2b2b !important;
+    --el-table-tr-bg-color: #2b2b2b !important;
+    --el-table-header-bg-color: #363636 !important;
+    --el-table-border-color: #4c4d4f !important;
+    --el-table-text-color: #cfd3dc !important;
+    --el-table-header-text-color: #fff !important;
+    --el-table-row-hover-bg-color: #3e3e3e !important;
+    /* 鼠标悬停颜色 */
+    background-color: #2b2b2b !important;
+    color: #cfd3dc !important;
+}
+
+/* 去掉表格底部的白线 */
+.el-table__inner-wrapper::before {
+    background-color: #4c4d4f !important;
+}
+
+/* 标签 Tag 样式微调 */
+.el-tag--dark {
+    border-color: transparent;
+}
+
+/* 弹窗 Dialog 样式 */
+.el-dialog {
+    background-color: #2b2b2b !important;
+}
+
+.el-dialog__title {
+    color: #fff !important;
+}
+
+.el-dialog__body {
+    padding: 20px !important;
+    color: #cfd3dc !important;
+}
+
+/* 输入框 Input 样式 */
+.el-input__wrapper {
+    background-color: #1e1e1e !important;
+    box-shadow: 0 0 0 1px #4c4d4f inset !important;
+}
+
+.el-input__inner {
+    color: #fff !important;
+}
+
+/* --- 4. 状态指示点 (Status Dots) --- */
 .status-dot {
     display: inline-block;
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    margin-right: 5px;
+    margin-right: 6px;
+    vertical-align: middle;
 }
 
+/* 运行中：绿色 + 呼吸灯效果 */
 .running {
     background-color: #67C23A;
+    box-shadow: 0 0 8px rgba(103, 194, 58, 0.6);
+    animation: pulse 2s infinite;
 }
 
+/* 已停止：灰色 */
 .exited {
     background-color: #909399;
+}
+
+/* 简单的呼吸动画 */
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(103, 194, 58, 0.4);
+    }
+
+    70% {
+        box-shadow: 0 0 0 6px rgba(103, 194, 58, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(103, 194, 58, 0);
+    }
+}
+
+/* --- 5. 控制台日志框 (Terminal Style) --- */
+.log-box {
+    background-color: #121212;
+    /* 纯黑背景 */
+    color: #f0f0f0;
+    padding: 15px;
+    height: 500px;
+    overflow-y: auto;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    /* 代码字体 */
+    font-size: 13px;
+    line-height: 1.5;
+    border: 1px solid #444;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    /* 保持换行 */
+    word-break: break-all;
+}
+
+/* 只有日志框里的滚动条要做得好看点 */
+.log-box::-webkit-scrollbar {
+    width: 10px;
+}
+
+.log-box::-webkit-scrollbar-track {
+    background: #1e1e1e;
+}
+
+.log-box::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 5px;
+}
+
+.log-box::-webkit-scrollbar-thumb:hover {
+    background: #777;
+}
+
+/* --- 6. 动态添加环境变量的行间距 --- */
+.el-row {
+    margin-bottom: 10px;
 }
