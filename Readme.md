@@ -3,14 +3,19 @@
 轻量级游戏服务器容器化管理平台。
 
 ## 运行指南
+
+### Makefile 命令
 ```bash
-go run main.go
+make dev               # 一键启动前后端开发服务
+make build             # 统一编译前后端
+make clean             # 清理构建产物
+make install-frontend  # 安装前端依赖
 ```
 
 ## 待办清单
 - [x] 实现本地调用 Docker API 创建和销毁容器
 - [x] 接入 SQLite 数据库，实现容器实例状态与配置的持久化存储
-- [ ] 编写 Makefile，实现前后端服务的一键启动、统一编译与清理
+- [x] 编写 Makefile，实现前后端服务的一键启动、统一编译与清理
 - [ ] 引入 GitHub Actions，构建 CI/CD 流水线实现代码自动化检查与跨平台编译发布
 - [ ] 引入 Cgroups 技术，实现游戏容器的 CPU 与内存资源配额动态限制
 - [ ] 设计基于 Docker Volume 的挂载方案，实现核心游戏存档的持久化分离
