@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Task
+        uses: arduino/setup-task@v2
+
+      - name: Install frontend dependencies
+        run: task frontend:install
+
+      - name: Build frontend once
+        run: task frontend:build
+
+      - name: Build and package cross-platform artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG_NAME="${GITHUB_REF_NAME}"
+          OUTPUT_ROOT="release"
+          FRONTEND_DIST="frontend/dist"
+
+          rm -rf "$OUTPUT_ROOT"
+          mkdir -p "$OUTPUT_ROOT"
+
+          TARGETS=(
+            "linux amd64 tar.gz"
+            "windows amd64 zip"
+            "darwin amd64 tar.gz"
+            "darwin arm64 tar.gz"
+          )
+
+          for TARGET in "${TARGETS[@]}"; do
+            GOOS=$(echo "$TARGET" | awk '{print $1}')
+            GOARCH=$(echo "$TARGET" | awk '{print $2}')
+            ARCHIVE_TYPE=$(echo "$TARGET" | awk '{print $3}')
+
+            TARGET_NAME="${GOOS}-${GOARCH}"
+            STAGE_DIR="$OUTPUT_ROOT/stage/minedock-${TAG_NAME}-${TARGET_NAME}"
+            mkdir -p "$STAGE_DIR/backend" "$STAGE_DIR/frontend"
+
+            BACKEND_BIN="minedock-backend"
+            if [ "$GOOS" = "windows" ]; then
+              BACKEND_BIN="minedock-backend.exe"
+            fi
+
+            GOOS="$GOOS" GOARCH="$GOARCH" go build -o "$STAGE_DIR/backend/$BACKEND_BIN" ./backend
+            cp -R "$FRONTEND_DIST" "$STAGE_DIR/frontend/dist"
+            cp Readme.md "$STAGE_DIR/"
+
+            ARCHIVE_BASE="minedock-${TAG_NAME}-${TARGET_NAME}"
+            if [ "$ARCHIVE_TYPE" = "zip" ]; then
+              (cd "$OUTPUT_ROOT/stage" && zip -r "../$ARCHIVE_BASE.zip" "$ARCHIVE_BASE")
+            else
+              (cd "$OUTPUT_ROOT/stage" && tar -czf "../$ARCHIVE_BASE.tar.gz" "$ARCHIVE_BASE")
+            fi
+          done
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.tar.gz
+            release/*.zip
