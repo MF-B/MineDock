@@ -3,8 +3,10 @@
 ## 1. 领域说明
 该领域负责容器实例的完整生命周期管理：
 - 查询当前实例列表
-- 创建并启动新实例
-- 停止并销毁指定实例
+- 创建新实例（不自动启动）
+- 启动指定实例
+- 停止指定实例
+- 彻底删除指定实例（要求先停止）
 
 该领域是当前系统的核心业务能力。
 
@@ -31,12 +33,16 @@ type Instance struct {
 | 方法 | 路径 | 说明 | 请求参数 | 返回结果 |
 | --- | --- | --- | --- | --- |
 | GET | `/api/instances` | 获取当前所有容器的列表 | 无 | `[{"container_id":"xxx", "name":"xxx", "status":"xxx"}]` |
-| POST | `/api/instances` | 创建并启动一个新容器 | `{"name": "测试服1号"}` | `{"status": "success", "container_id": "xxx"}` |
-| DELETE | `/api/instances/:id` | 停止并销毁指定容器 | 无（ID 在路径中） | `{"status": "success"}` |
+| POST | `/api/instances` | 创建一个新容器（初始为 Stopped） | `{"name": "测试服1号"}` | `{"status": "success", "container_id": "xxx"}` |
+| POST | `/api/instances/:id/start` | 启动指定容器实例 | 无（ID 在路径中） | `{"status": "success"}` |
+| POST | `/api/instances/:id/stop` | 停止指定容器实例 | 无（ID 在路径中） | `{"status": "success"}` |
+| DELETE | `/api/instances/:id` | 彻底删除指定容器实例 | 无（ID 在路径中） | `{"status": "success"}` |
 
 ## 4. 领域状态流转（当前实现语义）
-- 创建成功后：实例进入 `Running`，并写入 SQLite 持久化存储。
-- 销毁成功后：停止并销毁 Docker 容器，同时从 SQLite 中删除该实例记录。
+- 创建成功后：实例进入 `Stopped`，并写入 SQLite 持久化存储。
+- 启动成功后：实例状态更新为 `Running`。
+- 停止成功后：实例状态更新为 `Stopped`。
+- 删除成功后：销毁 Docker 容器，同时从 SQLite 中删除该实例记录；若实例仍为 `Running`，删除请求会被拒绝（需先停止）。
 - 列表查询：以后端从 Docker 引擎读取的受管容器为准，并同步更新 SQLite 中的实例状态信息。
 
 ## 5. 领域内外依赖关系

@@ -7,6 +7,8 @@ func NewRouter(h *Handler) http.Handler {
 
 	mux.HandleFunc("GET /api/instances", h.GetInstances)
 	mux.HandleFunc("POST /api/instances", h.CreateInstance)
+	mux.HandleFunc("POST /api/instances/{id}/start", h.StartInstance)
+	mux.HandleFunc("POST /api/instances/{id}/stop", h.StopInstance)
 	mux.HandleFunc("DELETE /api/instances/{id}", h.DeleteInstance)
 
 	return withCORS(mux)

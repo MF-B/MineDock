@@ -1,6 +1,12 @@
 <script setup>
 import { ref } from "vue";
-import { createInstance, deleteInstance, listInstances } from "./api/index.js";
+import {
+  createInstance,
+  deleteInstance,
+  listInstances,
+  startInstance,
+  stopInstance,
+} from "./api/index.js";
 
 const name = ref("测试服1号");
 const containerId = ref("");
@@ -53,6 +59,36 @@ async function handleDelete() {
     printError(error);
   }
 }
+
+async function handleStart() {
+  const trimmed = containerId.value.trim();
+  if (!trimmed) {
+    printError(new Error("container id is required"));
+    return;
+  }
+
+  try {
+    const data = await startInstance(trimmed);
+    print(data);
+  } catch (error) {
+    printError(error);
+  }
+}
+
+async function handleStop() {
+  const trimmed = containerId.value.trim();
+  if (!trimmed) {
+    printError(new Error("container id is required"));
+    return;
+  }
+
+  try {
+    const data = await stopInstance(trimmed);
+    print(data);
+  } catch (error) {
+    printError(error);
+  }
+}
 </script>
 
 <template>
@@ -61,13 +97,15 @@ async function handleDelete() {
 
     <div class="actions">
       <button @click="handleList">获取列表</button>
-      <button @click="handleCreate">开服</button>
-      <button @click="handleDelete">停服</button>
+      <button @click="handleCreate">创建</button>
+      <button @click="handleStart">开启</button>
+      <button @click="handleStop">关闭</button>
+      <button @click="handleDelete">删除</button>
     </div>
 
     <div class="field">
       <input v-model="name" placeholder="新容器名称，例如：测试服1号" />
-      <input v-model="containerId" placeholder="要停止的容器 ID" />
+      <input v-model="containerId" placeholder="目标容器 ID" />
     </div>
 
     <pre class="output">{{ output }}</pre>

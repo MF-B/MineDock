@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -14,6 +15,8 @@ import (
 	"minedock/backend/internal/model"
 	"minedock/backend/internal/store"
 )
+
+var ErrInstanceRunning = errors.New("instance is running, stop it before delete")
 
 const (
 	managedLabelKey   = "minedock.managed"
@@ -53,18 +56,46 @@ func (s *DockerService) CreateInstance(ctx context.Context, name string) (string
 		return "", fmt.Errorf("create container: %w", err)
 	}
 
-	if err := s.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		_ = s.cli.ContainerRemove(context.Background(), resp.ID, container.RemoveOptions{Force: true})
-		return "", fmt.Errorf("start container: %w", err)
-	}
-
-	inst := model.Instance{ContainerID: resp.ID, Name: name, Status: "Running"}
+	inst := model.Instance{ContainerID: resp.ID, Name: name, Status: "Stopped"}
 	if err := s.store.Save(ctx, inst); err != nil {
 		_ = s.cli.ContainerRemove(context.Background(), resp.ID, container.RemoveOptions{Force: true})
 		return "", err
 	}
 
 	return resp.ID, nil
+}
+
+func (s *DockerService) StartInstance(ctx context.Context, containerID string) error {
+	if err := s.cli.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
+		return fmt.Errorf("start container: %w", err)
+	}
+
+	inst, err := s.readInstance(ctx, containerID, "Running")
+	if err != nil {
+		return err
+	}
+	if err := s.store.Save(ctx, inst); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *DockerService) StopInstance(ctx context.Context, containerID string) error {
+	timeout := 10
+	if err := s.cli.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout}); err != nil {
+		return fmt.Errorf("stop container: %w", err)
+	}
+
+	inst, err := s.readInstance(ctx, containerID, "Stopped")
+	if err != nil {
+		return err
+	}
+	if err := s.store.Save(ctx, inst); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *DockerService) ListInstances(ctx context.Context) ([]model.Instance, error) {
@@ -99,15 +130,57 @@ func (s *DockerService) ListInstances(ctx context.Context) ([]model.Instance, er
 }
 
 func (s *DockerService) DeleteInstance(ctx context.Context, containerID string) error {
-	timeout := 10
-	_ = s.cli.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout})
-	if err := s.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); err != nil {
+	inspect, err := s.cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return fmt.Errorf("inspect container: %w", err)
+	}
+
+	if inspect.State != nil && inspect.State.Running {
+		return ErrInstanceRunning
+	}
+
+	if err := s.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: false}); err != nil {
 		return fmt.Errorf("remove container: %w", err)
 	}
 	if err := s.store.Delete(ctx, containerID); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (s *DockerService) readInstance(ctx context.Context, containerID string, fallbackStatus string) (model.Instance, error) {
+	inst, ok, err := s.store.Get(ctx, containerID)
+	if err != nil {
+		return model.Instance{}, err
+	}
+	if ok {
+		inst.Status = fallbackStatus
+		return inst, nil
+	}
+
+	inspect, err := s.cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return model.Instance{}, fmt.Errorf("inspect container: %w", err)
+	}
+
+	name := ""
+	if inspect.Config != nil && inspect.Config.Labels != nil {
+		name = strings.TrimSpace(inspect.Config.Labels[nameLabelKey])
+	}
+	if name == "" {
+		name = strings.TrimPrefix(inspect.Name, "/")
+	}
+
+	status := fallbackStatus
+	if inspect.State != nil {
+		if inspect.State.Running {
+			status = "Running"
+		} else {
+			status = "Stopped"
+		}
+	}
+
+	return model.Instance{ContainerID: containerID, Name: name, Status: status}, nil
 }
 
 func (s *DockerService) ensureImage(ctx context.Context, imageName string) error {

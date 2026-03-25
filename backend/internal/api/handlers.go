@@ -67,20 +67,61 @@ func (h *Handler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, createResponse{Status: "success", ContainerID: id})
 }
 
-func (h *Handler) DeleteInstance(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/api/instances/")
-	id = strings.TrimSpace(id)
-	if id == "" || strings.Contains(id, "/") {
+func (h *Handler) StartInstance(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathContainerID(r)
+	if !ok {
 		writeJSON(w, http.StatusBadRequest, statusResponse{Status: "error", Error: "invalid container id"})
 		return
 	}
 
-	if err := h.svc.DeleteInstance(r.Context(), id); err != nil {
+	if err := h.svc.StartInstance(r.Context(), id); err != nil {
 		writeJSON(w, http.StatusInternalServerError, statusResponse{Status: "error", Error: err.Error()})
 		return
 	}
 
 	writeJSON(w, http.StatusOK, statusResponse{Status: "success"})
+}
+
+func (h *Handler) StopInstance(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathContainerID(r)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, statusResponse{Status: "error", Error: "invalid container id"})
+		return
+	}
+
+	if err := h.svc.StopInstance(r.Context(), id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, statusResponse{Status: "error", Error: err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, statusResponse{Status: "success"})
+}
+
+func (h *Handler) DeleteInstance(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathContainerID(r)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, statusResponse{Status: "error", Error: "invalid container id"})
+		return
+	}
+
+	if err := h.svc.DeleteInstance(r.Context(), id); err != nil {
+		code := http.StatusInternalServerError
+		if err == service.ErrInstanceRunning {
+			code = http.StatusConflict
+		}
+		writeJSON(w, code, statusResponse{Status: "error", Error: err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, statusResponse{Status: "success"})
+}
+
+func pathContainerID(r *http.Request) (string, bool) {
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" || strings.Contains(id, "/") {
+		return "", false
+	}
+	return id, true
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

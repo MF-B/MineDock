@@ -27,6 +27,18 @@ export function createInstance(name) {
   });
 }
 
+export function startInstance(containerId) {
+  return request(`/instances/${containerId}/start`, {
+    method: "POST",
+  });
+}
+
+export function stopInstance(containerId) {
+  return request(`/instances/${containerId}/stop`, {
+    method: "POST",
+  });
+}
+
 export function deleteInstance(containerId) {
   return request(`/instances/${containerId}`, {
     method: "DELETE",
