@@ -25,15 +25,15 @@ const (
 // DockerService contains business logic for container management.
 type DockerService struct {
 	cli   *client.Client
-	store *store.MemoryStore
+	store *store.SQLiteStore
 	image string
 }
 
-func NewDockerService(cli *client.Client, memStore *store.MemoryStore, imageName string) *DockerService {
+func NewDockerService(cli *client.Client, sqliteStore *store.SQLiteStore, imageName string) *DockerService {
 	if strings.TrimSpace(imageName) == "" {
 		imageName = defaultImage
 	}
-	return &DockerService{cli: cli, store: memStore, image: imageName}
+	return &DockerService{cli: cli, store: sqliteStore, image: imageName}
 }
 
 func (s *DockerService) CreateInstance(ctx context.Context, name string) (string, error) {
@@ -59,7 +59,7 @@ func (s *DockerService) CreateInstance(ctx context.Context, name string) (string
 	}
 
 	inst := model.Instance{ContainerID: resp.ID, Name: name, Status: "Running"}
-	if err := s.store.Save(inst); err != nil {
+	if err := s.store.Save(ctx, inst); err != nil {
 		_ = s.cli.ContainerRemove(context.Background(), resp.ID, container.RemoveOptions{Force: true})
 		return "", err
 	}
@@ -91,7 +91,7 @@ func (s *DockerService) ListInstances(ctx context.Context) ([]model.Instance, er
 			Name:        name,
 			Status:      status,
 		}
-		_ = s.store.Save(inst)
+		_ = s.store.Save(ctx, inst)
 		instances = append(instances, inst)
 	}
 
@@ -104,7 +104,9 @@ func (s *DockerService) DeleteInstance(ctx context.Context, containerID string) 
 	if err := s.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); err != nil {
 		return fmt.Errorf("remove container: %w", err)
 	}
-	s.store.Delete(containerID)
+	if err := s.store.Delete(ctx, containerID); err != nil {
+		return err
+	}
 	return nil
 }
 

@@ -19,9 +19,19 @@ func main() {
 	}
 	defer cli.Close()
 
-	memStore := store.NewMemoryStore()
+	dbPath := os.Getenv("MINEDOCK_DB_PATH")
+	if dbPath == "" {
+		dbPath = "data/minedock.db"
+	}
+
+	sqliteStore, err := store.NewSQLiteStore(dbPath)
+	if err != nil {
+		log.Fatalf("init sqlite store: %v", err)
+	}
+	defer sqliteStore.Close()
+
 	imageName := os.Getenv("MINEDOCK_IMAGE")
-	svc := service.NewDockerService(cli, memStore, imageName)
+	svc := service.NewDockerService(cli, sqliteStore, imageName)
 	h := api.NewHandler(svc)
 	router := api.NewRouter(h)
 
