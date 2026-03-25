@@ -69,7 +69,8 @@ jobs:
               BACKEND_BIN="minedock-backend.exe"
             fi
 
-            GOOS="$GOOS" GOARCH="$GOARCH" go build -o "$STAGE_DIR/backend/$BACKEND_BIN" ./backend
+            # Build from module root (backend/) because go.mod is not at repo root.
+            (cd backend && GOOS="$GOOS" GOARCH="$GOARCH" go build -o "../$STAGE_DIR/backend/$BACKEND_BIN" .)
             cp -R "$FRONTEND_DIST" "$STAGE_DIR/frontend/dist"
             cp Readme.md "$STAGE_DIR/"
 
