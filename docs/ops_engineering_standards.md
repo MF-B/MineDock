@@ -1,11 +1,8 @@
 # Ops & Infrastructure
 
-本文档定义了 MineDock 项目的本地开发工作流、自动化构建与 CI/CD 规范。
+本文档定义了项目的本地开发工作流、自动化构建与 CI/CD 规范
 
-## 1. 核心构建工具
-项目根目录维护一个统一的 `Taskfile.yml`，屏蔽底层各语言组件的启动差异。
-**当前支持的指令：**
-
+## 1. 构建命令
 | 指令 | 作用 | 说明 |
 | --- | --- | --- |
 | `task --list-all` | 查看可用任务 | 输出当前支持的任务列表 |
@@ -20,10 +17,7 @@
 | `task vet` | 执行全局静态检查 | 当前依赖 `backend:vet` |
 | `task test` | 执行全局测试 | 当前依赖 `backend:test` |
 
-## 2. 环境依赖约束
-
-本地开发与构建至少需要以下工具：
-
+## 2. 环境依赖
 | 组件 | 用途 |
 | --- | --- |
 | Go | 后端编译与运行 |
@@ -32,8 +26,7 @@
 | task | 统一任务入口 |
 
 ## 3. CI/CD 对接规范
-
-项目已在仓库内新增 GitHub Actions 工作流：
+GitHub Actions 工作流：
 
 - `.github/workflows/ci.yml`
 - `.github/workflows/release.yml`
