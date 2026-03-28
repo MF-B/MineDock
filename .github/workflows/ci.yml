@@ -29,8 +29,11 @@ jobs:
       - name: Install frontend dependencies
         run: task frontend:install
 
-      - name: Check Go fmt
+      - name: Run formatting checks
         run: task fmt
+
+      - name: Run lint checks
+        run: task lint
 
       - name: Run Go tests
         run: task test
