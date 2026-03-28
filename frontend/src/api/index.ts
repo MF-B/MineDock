@@ -1,8 +1,12 @@
-const BASE_URL =
+const BASE_URL: string =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
-  "http://localhost:8080/api";
+  "/api";
 
-async function request(path, options = {}) {
+interface RequestOptions extends RequestInit {
+  headers?: Record<string, string>;
+}
+
+async function request<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
   const resp = await fetch(`${BASE_URL}${path}`, {
     headers: { "Content-Type": "application/json" },
     ...options,
@@ -13,33 +17,39 @@ async function request(path, options = {}) {
     const message = data?.error || `request failed: ${resp.status}`;
     throw new Error(message);
   }
-  return data;
+  return data as T;
 }
 
-export function listInstances() {
-  return request("/instances", { method: "GET" });
+export interface Instance {
+  container_id: string;
+  name: string;
+  status: string;
 }
 
-export function createInstance(name) {
+export function listInstances(): Promise<Instance[]> {
+  return request<Instance[]>("/instances", { method: "GET" });
+}
+
+export function createInstance(name: string): Promise<unknown> {
   return request("/instances", {
     method: "POST",
     body: JSON.stringify({ name }),
   });
 }
 
-export function startInstance(containerId) {
+export function startInstance(containerId: string): Promise<unknown> {
   return request(`/instances/${containerId}/start`, {
     method: "POST",
   });
 }
 
-export function stopInstance(containerId) {
+export function stopInstance(containerId: string): Promise<unknown> {
   return request(`/instances/${containerId}/stop`, {
     method: "POST",
   });
 }
 
-export function deleteInstance(containerId) {
+export function deleteInstance(containerId: string): Promise<unknown> {
   return request(`/instances/${containerId}`, {
     method: "DELETE",
   });

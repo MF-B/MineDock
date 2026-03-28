@@ -1,28 +1,29 @@
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import Sidebar from "./components/Sidebar.vue";
+import type { Instance } from "./api/index";
 import {
   createInstance,
   deleteInstance,
   listInstances,
   startInstance,
   stopInstance,
-} from "./api/index.js";
+} from "./api/index";
 
 const { t } = useI18n();
 
-const instances = ref([]);
+const instances = ref<Instance[]>([]);
 const showCreateModal = ref(false);
 const newContainerName = ref("");
 const output = ref(t('status.waiting'));
 
 // 简单的日志输出封装
-function print(data) {
+function print(data: unknown): void {
   output.value = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
 }
 
-function printError(error) {
+function printError(error: Error): void {
   output.value = `ERROR: ${error.message}`;
 }
 
@@ -30,15 +31,14 @@ function printError(error) {
 async function fetchInstances() {
   try {
     const data = await listInstances();
-    // 假设接口返回数组
-    instances.value = Array.isArray(data) ? data : (data.instances || []);
+    instances.value = data;
     if (instances.value.length > 0) {
       print(t('status.listRefreshed'));
     } else {
       print(t('status.noContainers'));
     }
-  } catch (error) {
-    printError(error);
+  } catch (err) {
+    printError(err as Error);
   }
 }
 
@@ -63,13 +63,13 @@ async function handleCreate() {
     newContainerName.value = "";
     // 创建完成后重新刷新列表
     await fetchInstances();
-  } catch (error) {
-    printError(error);
+  } catch (err) {
+    printError(err as Error);
   }
 }
 
 // 处理删除容器
-async function handleDelete(containerId) {
+async function handleDelete(containerId: string): Promise<void> {
   if (!confirm(t('containers.confirmDelete'))) return;
   
   try {
@@ -77,13 +77,13 @@ async function handleDelete(containerId) {
     const data = await deleteInstance(containerId);
     print(data);
     await fetchInstances();
-  } catch (error) {
-    printError(error);
+  } catch (err) {
+    printError(err as Error);
   }
 }
 
 // 处理拉杆开关（开启/关闭容器）
-async function handleToggle(instance) {
+async function handleToggle(instance: Instance): Promise<void> {
   const isRunning = isInstanceRunning(instance.status);
   
   try {
@@ -97,8 +97,8 @@ async function handleToggle(instance) {
       await startInstance(instance.container_id);
       print(t('status.startSuccess', { name: instance.name }));
     }
-  } catch (error) {
-    printError(error);
+  } catch (err) {
+    printError(err as Error);
   } finally {
     // 无论请求成功与否，都要拉取最新状态刷新列表
     await fetchInstances();
@@ -106,7 +106,7 @@ async function handleToggle(instance) {
 }
 
 // 判断容器当前是否为运行状态
-function isInstanceRunning(status) {
+function isInstanceRunning(status: string | undefined): boolean {
   if (!status) return false;
   // Docker 运行状态通常带有 "Up" 字样，或者用 "running" 表示
   return status.toLowerCase().startsWith("up") || status.toLowerCase() === "running";
