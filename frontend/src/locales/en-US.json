@@ -27,5 +27,10 @@
   },
   "sidebar": {
     "containerList": "Containers"
+  },
+  "topbar": {
+    "switchLanguage": "Switch Language",
+    "zhCN": "简体中文",
+    "enUS": "English"
   }
 }
