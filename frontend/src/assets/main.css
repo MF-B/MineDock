@@ -20,6 +20,7 @@
   --border: #d5e2d8;
 
   /* Layout Variables */
+  --header-height: 48px;
   --bg-stripe-size: 6px;
   --bg-stripe-cycle: 12px;
 }

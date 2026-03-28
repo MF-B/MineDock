@@ -60,8 +60,8 @@ const isOpen = ref(false);
 /* =========== 移动端悬浮按钮与遮罩 =========== */
 .hamburger-btn {
   position: fixed;
-  top: 4px;
-  left: 4px;
+  top: 14px; /* 精确对应桌面端通过 padding-top 计算出来的垂直偏移像素 */
+  left: 12px; /* 精确对应桌面端侧边宽和内居中共计 12px 的水平偏移 */
   z-index: 40;
   background: transparent;
   border: none;
@@ -119,7 +119,7 @@ const isOpen = ref(false);
 }
 
 .mobile-header {
-  height: 60px;
+  height: var(--header-height);
   flex-shrink: 0;
   width: 100%;
   z-index: 10;
@@ -161,7 +161,8 @@ const isOpen = ref(false);
 
 .desktop-icon-container {
   width: 56px; 
-  height: 60px;
+  height: var(--header-height);
+  padding-top: 12px; /* 把汉堡挪到底侧，为顶部让出刚好 4px 的纯净视觉间隙 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -190,7 +191,7 @@ const isOpen = ref(false);
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 10px 0;
+  padding: 4px 0 10px 0; /* 严格配合上方给底侧留出对等的 4px 间隙，实现完美对称 */
   overflow-y: auto;
   overflow-x: hidden;
   z-index: 10;
