@@ -1,20 +1,20 @@
-import { ref } from 'vue';
-import { defineStore } from 'pinia';
-import type { Instance } from '../api/index';
+import { ref } from "vue";
+import { defineStore } from "pinia";
+import type { Instance } from "../api/index";
 import {
   listInstances,
   createInstance as apiCreate,
   deleteInstance as apiDelete,
   startInstance as apiStart,
   stopInstance as apiStop,
-} from '../api/index';
+} from "../api/index";
 
-export const useContainerStore = defineStore('containers', () => {
+export const useContainerStore = defineStore("containers", () => {
   const instances = ref<Instance[]>([]);
-  const output = ref<string>('');
+  const output = ref<string>("");
 
   function print(data: unknown): void {
-    output.value = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+    output.value = typeof data === "string" ? data : JSON.stringify(data, null, 2);
   }
 
   function printError(error: Error): void {
@@ -74,7 +74,7 @@ export const useContainerStore = defineStore('containers', () => {
 
   function isRunning(status: string | undefined): boolean {
     if (!status) return false;
-    return status.toLowerCase().startsWith('up') || status.toLowerCase() === 'running';
+    return status.toLowerCase().startsWith("up") || status.toLowerCase() === "running";
   }
 
   return {

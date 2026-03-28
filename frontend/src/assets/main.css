@@ -1,6 +1,6 @@
 :root {
   /* ===== 基础色板 ===== */
-  --brown-500: #8F6051;
+  --brown-500: #8f6051;
   --brown-600: #8c5c4e;
 
   /* ===== Create 主题变量 ===== */
@@ -74,11 +74,13 @@ body {
   font-family: "Segoe UI", "PingFang SC", sans-serif;
   color: var(--ink);
   background-color: var(--bg-primary);
-  background-image: repeating-linear-gradient(180deg,
-      var(--bg-primary) 0px,
-      var(--bg-primary) var(--bg-stripe-size),
-      var(--bg-secondary) var(--bg-stripe-size),
-      var(--bg-secondary) var(--bg-stripe-cycle));
+  background-image: repeating-linear-gradient(
+    180deg,
+    var(--bg-primary) 0px,
+    var(--bg-primary) var(--bg-stripe-size),
+    var(--bg-secondary) var(--bg-stripe-size),
+    var(--bg-secondary) var(--bg-stripe-cycle)
+  );
   background-repeat: repeat;
   background-size: 100% var(--bg-stripe-cycle);
   display: flex;

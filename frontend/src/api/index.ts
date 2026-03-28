@@ -1,6 +1,5 @@
 const BASE_URL: string =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
-  "/api";
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || "/api";
 
 interface RequestOptions extends RequestInit {
   headers?: Record<string, string>;

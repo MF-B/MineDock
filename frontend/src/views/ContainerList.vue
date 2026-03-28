@@ -10,25 +10,29 @@ const showCreateModal = ref(false);
 const newContainerName = ref("");
 
 onMounted(() => {
-  store.print(t('status.waiting'));
-  store.fetchInstances().then((success) => {
-    if (!success) return;
-    if (store.instances.length > 0) {
-      store.print(t('status.listRefreshed'));
-    } else {
-      store.print(t('status.noContainers'));
-    }
-  });
+  void initializeList();
 });
+
+async function initializeList(): Promise<void> {
+  store.print(t("status.waiting"));
+  const success = await store.fetchInstances();
+  if (!success) return;
+
+  if (store.instances.length > 0) {
+    store.print(t("status.listRefreshed"));
+  } else {
+    store.print(t("status.noContainers"));
+  }
+}
 
 async function handleCreate(): Promise<void> {
   const trimmed = newContainerName.value.trim();
   if (!trimmed) {
-    store.printError(new Error(t('status.emptyName')));
+    store.printError(new Error(t("status.emptyName")));
     return;
   }
 
-  store.print(t('status.creating'));
+  store.print(t("status.creating"));
   const success = await store.create(trimmed);
   if (success) {
     showCreateModal.value = false;
@@ -37,24 +41,28 @@ async function handleCreate(): Promise<void> {
 }
 
 async function handleDelete(containerId: string): Promise<void> {
-  if (!confirm(t('containers.confirmDelete'))) return;
-  store.print(t('status.deleting'));
+  if (!confirm(t("containers.confirmDelete"))) return;
+  store.print(t("status.deleting"));
   await store.remove(containerId);
 }
 
-async function handleToggle(instance: { container_id: string; name: string; status: string }): Promise<void> {
+async function handleToggle(instance: {
+  container_id: string;
+  name: string;
+  status: string;
+}): Promise<void> {
   const running = store.isRunning(instance.status);
   if (running) {
-    store.print(t('status.stopping', { name: instance.name }));
+    store.print(t("status.stopping", { name: instance.name }));
   } else {
-    store.print(t('status.starting', { name: instance.name }));
+    store.print(t("status.starting", { name: instance.name }));
   }
   const success = await store.toggle(instance);
   if (!success) return;
   if (running) {
-    store.print(t('status.stopSuccess', { name: instance.name }));
+    store.print(t("status.stopSuccess", { name: instance.name }));
   } else {
-    store.print(t('status.startSuccess', { name: instance.name }));
+    store.print(t("status.startSuccess", { name: instance.name }));
   }
 }
 </script>
@@ -62,21 +70,23 @@ async function handleToggle(instance: { container_id: string; name: string; stat
 <template>
   <!-- 顶部栏 -->
   <header class="page-header">
-    <h1 class="page-title">{{ $t('containers.title') }}</h1>
+    <h1 class="page-title">{{ $t("containers.title") }}</h1>
   </header>
-  
+
   <main class="main-content">
     <!-- 列表操作栏 -->
     <div class="content-actions">
-      <button class="create-btn" @click="showCreateModal = true">{{ $t('containers.createBtn') }}</button>
+      <button class="create-btn" @click="showCreateModal = true">
+        {{ $t("containers.createBtn") }}
+      </button>
     </div>
     <!-- 卡片列表布局 -->
     <div class="card-list">
       <div v-if="store.instances.length === 0" class="empty-state">
-        {{ $t('containers.emptyState') }}
+        {{ $t("containers.emptyState") }}
       </div>
-      
-      <div class="card" v-for="item in store.instances" :key="item.container_id">
+
+      <div v-for="item in store.instances" :key="item.container_id" class="card">
         <!-- 左侧：容器名称 -->
         <div class="card-left">
           <span class="card-name">{{ item.name }}</span>
@@ -84,26 +94,34 @@ async function handleToggle(instance: { container_id: string; name: string; stat
         <!-- 右侧：控制按钮（拉杆与删除） -->
         <div class="card-right">
           <label class="switch" :title="$t('containers.toggleTitle')">
-            <input type="checkbox" :checked="store.isRunning(item.status)" @change="handleToggle(item)" />
+            <input
+              type="checkbox"
+              :checked="store.isRunning(item.status)"
+              @change="handleToggle(item)"
+            />
             <span class="slider round"></span>
           </label>
-          <button class="delete-btn" @click="handleDelete(item.container_id)">{{ $t('containers.delete') }}</button>
+          <button class="delete-btn" @click="handleDelete(item.container_id)">
+            {{ $t("containers.delete") }}
+          </button>
         </div>
       </div>
     </div>
 
     <!-- 新建容器的弹窗 (Modal) -->
-    <div class="modal" v-if="showCreateModal">
+    <div v-if="showCreateModal" class="modal">
       <div class="modal-content">
-        <h3>{{ $t('createModal.title') }}</h3>
-        <input 
-          v-model="newContainerName" 
-          :placeholder="$t('createModal.placeholder')" 
+        <h3>{{ $t("createModal.title") }}</h3>
+        <input
+          v-model="newContainerName"
+          :placeholder="$t('createModal.placeholder')"
           @keyup.enter="handleCreate"
         />
         <div class="modal-actions">
-          <button class="btn-cancel" @click="showCreateModal = false">{{ $t('createModal.cancel') }}</button>
-          <button class="btn-confirm" @click="handleCreate">{{ $t('createModal.confirm') }}</button>
+          <button class="btn-cancel" @click="showCreateModal = false">
+            {{ $t("createModal.cancel") }}
+          </button>
+          <button class="btn-confirm" @click="handleCreate">{{ $t("createModal.confirm") }}</button>
         </div>
       </div>
     </div>
@@ -129,7 +147,7 @@ async function handleToggle(instance: { container_id: string; name: string; stat
   font-size: 16px;
   font-weight: bold;
   letter-spacing: 2px;
-  font-family: 'Segoe UI', "PingFang SC", sans-serif;
+  font-family: "Segoe UI", "PingFang SC", sans-serif;
 }
 
 /* 内容区操作栏与新建按钮 */
@@ -187,17 +205,25 @@ async function handleToggle(instance: { container_id: string; name: string; stat
   padding: 10px 20px;
   background-color: var(--card-bg);
   border: 3px solid var(--card-border);
-  box-shadow: 
+  box-shadow:
     inset 0 3px 0 0 var(--card-bg),
     inset 0 -3px 0 0 var(--card-bg),
     inset 0 6px 0 0 var(--card-border-inner),
     inset 0 -6px 0 0 var(--card-border-inner);
   border-radius: 0;
   clip-path: polygon(
-    /* 左上角 */  0 3px, 3px 3px, 3px 0,
-    /* 右上角 */  calc(100% - 3px) 0, calc(100% - 3px) 3px, 100% 3px,
-    /* 右下角 */  100% calc(100% - 3px), calc(100% - 3px) calc(100% - 3px), calc(100% - 3px) 100%,
-    /* 左下角 */  3px 100%, 3px calc(100% - 3px), 0 calc(100% - 3px)
+    /* 左上角 */ 0 3px,
+    3px 3px,
+    3px 0,
+    /* 右上角 */ calc(100% - 3px) 0,
+    calc(100% - 3px) 3px,
+    100% 3px,
+    /* 右下角 */ 100% calc(100% - 3px),
+    calc(100% - 3px) calc(100% - 3px),
+    calc(100% - 3px) 100%,
+    /* 左下角 */ 3px 100%,
+    3px calc(100% - 3px),
+    0 calc(100% - 3px)
   );
   transition: filter 0.2s;
 }
@@ -257,9 +283,12 @@ async function handleToggle(instance: { container_id: string; name: string; stat
 .slider {
   position: absolute;
   cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background-color: var(--toggle-off);
-  transition: .4s;
+  transition: 0.4s;
 }
 
 .slider:before {
@@ -270,7 +299,7 @@ async function handleToggle(instance: { container_id: string; name: string; stat
   left: 3px;
   bottom: 3px;
   background-color: white;
-  transition: .4s;
+  transition: 0.4s;
 }
 
 input:checked + .slider {
@@ -372,7 +401,7 @@ input:checked + .slider:before {
 
 /* ========== 底部输出 ========== */
 .output {
-  margin-top: auto; 
+  margin-top: auto;
   padding: 12px;
   background: var(--output-bg);
   color: var(--output-text);
