@@ -26,7 +26,7 @@ const isOpen = ref(false);
               <path d="M4 8h16v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8zm0-4h16v2H4V4z"/>
             </svg>
           </div>
-          <div class="menu-text">容器列表</div>
+          <div class="menu-text">{{ $t('sidebar.containerList') }}</div>
         </a>
       </div>
     </aside>
@@ -50,7 +50,7 @@ const isOpen = ref(false);
             <path d="M4 8h16v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8zm0-4h16v2H4V4z"/>
           </svg>
         </div>
-        <div class="menu-text">容器列表</div>
+        <div class="menu-text">{{ $t('sidebar.containerList') }}</div>
       </a>
     </div>
   </aside>

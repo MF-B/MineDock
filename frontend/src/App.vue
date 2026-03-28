@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted } from "vue";
+import { useI18n } from "vue-i18n";
 import Sidebar from "./components/Sidebar.vue";
 import {
   createInstance,
@@ -9,10 +10,12 @@ import {
   stopInstance,
 } from "./api/index.js";
 
+const { t } = useI18n();
+
 const instances = ref([]);
 const showCreateModal = ref(false);
 const newContainerName = ref("");
-const output = ref("等待操作...");
+const output = ref(t('status.waiting'));
 
 // 简单的日志输出封装
 function print(data) {
@@ -30,9 +33,9 @@ async function fetchInstances() {
     // 假设接口返回数组
     instances.value = Array.isArray(data) ? data : (data.instances || []);
     if (instances.value.length > 0) {
-      print("已刷新容器列表。");
+      print(t('status.listRefreshed'));
     } else {
-      print("当前暂无容器。");
+      print(t('status.noContainers'));
     }
   } catch (error) {
     printError(error);
@@ -48,12 +51,12 @@ onMounted(() => {
 async function handleCreate() {
   const trimmed = newContainerName.value.trim();
   if (!trimmed) {
-    printError(new Error("容器名称不能为空"));
+    printError(new Error(t('status.emptyName')));
     return;
   }
 
   try {
-    output.value = "正在创建容器...";
+    output.value = t('status.creating');
     const data = await createInstance(trimmed);
     print(data);
     showCreateModal.value = false;
@@ -67,10 +70,10 @@ async function handleCreate() {
 
 // 处理删除容器
 async function handleDelete(containerId) {
-  if (!confirm("确认彻底删除该容器吗？")) return;
+  if (!confirm(t('containers.confirmDelete'))) return;
   
   try {
-    output.value = "正在删除容器...";
+    output.value = t('status.deleting');
     const data = await deleteInstance(containerId);
     print(data);
     await fetchInstances();
@@ -86,13 +89,13 @@ async function handleToggle(instance) {
   try {
     // 拉杆点击时可能因为网络延迟导致状态闪烁，可以在调 API 之前可以先加个 loading 或者直接请求
     if (isRunning) {
-      output.value = `正在关闭容器: ${instance.name}...`;
+      output.value = t('status.stopping', { name: instance.name });
       await stopInstance(instance.container_id);
-      print(`容器 ${instance.name} 请求关闭成功`);
+      print(t('status.stopSuccess', { name: instance.name }));
     } else {
-      output.value = `正在开启容器: ${instance.name}...`;
+      output.value = t('status.starting', { name: instance.name });
       await startInstance(instance.container_id);
-      print(`容器 ${instance.name} 请求开启成功`);
+      print(t('status.startSuccess', { name: instance.name }));
     }
   } catch (error) {
     printError(error);
@@ -115,18 +118,18 @@ function isInstanceRunning(status) {
   <div class="page-wrapper">
     <!-- 顶部栏 -->
     <header class="page-header">
-      <h1 class="page-title">容器列表</h1>
+      <h1 class="page-title">{{ $t('containers.title') }}</h1>
     </header>
     
     <main class="main-content">
       <!-- 列表操作栏 -->
       <div class="content-actions">
-        <button class="create-btn" @click="showCreateModal = true">新建容器</button>
+        <button class="create-btn" @click="showCreateModal = true">{{ $t('containers.createBtn') }}</button>
       </div>
       <!-- 卡片列表布局 -->
       <div class="card-list">
         <div v-if="instances.length === 0" class="empty-state">
-          暂无容器，请点击右上角新建容器。
+          {{ $t('containers.emptyState') }}
         </div>
         
         <div class="card" v-for="item in instances" :key="item.container_id">
@@ -137,11 +140,11 @@ function isInstanceRunning(status) {
           </div>
           <!-- 右侧：控制按钮（拉杆与删除） -->
           <div class="card-right">
-            <label class="switch" title="开启/关闭">
+            <label class="switch" :title="$t('containers.toggleTitle')">
               <input type="checkbox" :checked="isInstanceRunning(item.status)" @change="handleToggle(item)" />
               <span class="slider round"></span>
             </label>
-            <button class="delete-btn" @click="handleDelete(item.container_id)">删除</button>
+            <button class="delete-btn" @click="handleDelete(item.container_id)">{{ $t('containers.delete') }}</button>
           </div>
         </div>
       </div>
@@ -149,15 +152,15 @@ function isInstanceRunning(status) {
       <!-- 新建容器的弹窗 (Modal) -->
       <div class="modal" v-if="showCreateModal">
         <div class="modal-content">
-          <h3>新建容器</h3>
+          <h3>{{ $t('createModal.title') }}</h3>
           <input 
             v-model="newContainerName" 
-            placeholder="请输入新容器名称..." 
+            :placeholder="$t('createModal.placeholder')" 
             @keyup.enter="handleCreate"
           />
           <div class="modal-actions">
-            <button class="btn-cancel" @click="showCreateModal = false">取消</button>
-            <button class="btn-confirm" @click="handleCreate">确定</button>
+            <button class="btn-cancel" @click="showCreateModal = false">{{ $t('createModal.cancel') }}</button>
+            <button class="btn-confirm" @click="handleCreate">{{ $t('createModal.confirm') }}</button>
           </div>
         </div>
       </div>
