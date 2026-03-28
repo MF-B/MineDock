@@ -65,7 +65,7 @@ const isOpen = ref(false);
   z-index: 40;
   background: transparent;
   border: none;
-  color: var(--create-brass-primary, #fde285);
+  color: var(--create-brass-primary);
   padding: 8px;
   cursor: pointer;
   display: flex;
@@ -75,8 +75,8 @@ const isOpen = ref(false);
   transition: all 0.2s ease;
 }
 .hamburger-btn:hover {
-  background: rgba(0, 0, 0, 0.2);
-  color: var(--create-brass-secondary, #f5cb6e);
+  background: var(--hover-darken);
+  color: var(--create-brass-secondary);
 }
 .icon {
   width: 24px;
@@ -86,7 +86,7 @@ const isOpen = ref(false);
 .sidebar-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--shadow-medium);
   z-index: 45;
 }
 
@@ -101,20 +101,20 @@ const isOpen = ref(false);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cpath fill='%23343a3d' d='M0,0h4v1H0z M6,0h2v1H6z M15,1h1v1H15z M0,1h3v1H0z M5,1h2v1H5z M14,2h2v1H14z M0,2h2v1H0z M4,2h2v1H4z M13,3h3v1H13z M0,3h1v1H0z M3,3h2v1H3z M12,4h4v1H12z M2,4h2v1H2z M11,5h4v1H11z M1,5h2v1H1z M10,6h4v1H10z M0,6h2v1H0z M9,7h4v1H9z M15,7h1v1H15z M0,7h1v1H0z M8,8h4v1H8z M14,8h2v1H14z M7,9h4v1H7z M13,9h2v1H13z M6,10h4v1H6z M12,10h2v1H12z M5,11h4v1H5z M11,11h2v1H11z M4,12h4v1H4z M10,12h2v1H10z M3,13h4v1H3z M9,13h2v1H9z M2,14h4v1H2z M8,14h2v1H8z M1,15h4v1H1z M7,15h2v1H7z'/%3E%3C/svg%3E");
   background-size: 128px 128px;
   image-rendering: pixelated; 
-  border: 4px solid #b58550;
+  border: 4px solid var(--create-border-outer);
   z-index: 50;
   display: flex;
   flex-direction: column;
-  box-shadow: 4px 0 16px rgba(0,0,0,0.5);
+  box-shadow: 4px 0 16px var(--shadow-medium);
 }
 
 .sidebar-mobile::after {
   content: '';
   position: absolute;
   inset: 0;
-  border: 4px solid #e0d68c;
+  border: 4px solid var(--create-border-inner);
   pointer-events: none;
-  box-shadow: inset 0 0 0 4px #32302b, inset -2px 0 4px rgba(0,0,0,0.3);
+  box-shadow: inset 0 0 0 4px var(--create-border-dark), inset -2px 0 4px var(--shadow-light);
   z-index: 20;
 }
 
@@ -136,10 +136,10 @@ const isOpen = ref(false);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cpath fill='%23343a3d' d='M0,0h4v1H0z M6,0h2v1H6z M15,1h1v1H15z M0,1h3v1H0z M5,1h2v1H5z M14,2h2v1H14z M0,2h2v1H0z M4,2h2v1H4z M13,3h3v1H13z M0,3h1v1H0z M3,3h2v1H3z M12,4h4v1H12z M2,4h2v1H2z M11,5h4v1H11z M1,5h2v1H1z M10,6h4v1H10z M0,6h2v1H0z M9,7h4v1H9z M15,7h1v1H15z M0,7h1v1H0z M8,8h4v1H8z M14,8h2v1H14z M7,9h4v1H7z M13,9h2v1H13z M6,10h4v1H6z M12,10h2v1H12z M5,11h4v1H5z M11,11h2v1H11z M4,12h4v1H4z M10,12h2v1H10z M3,13h4v1H3z M9,13h2v1H9z M2,14h4v1H2z M8,14h2v1H8z M1,15h4v1H1z M7,15h2v1H7z'/%3E%3C/svg%3E");
   background-size: 128px 128px;
   image-rendering: pixelated;
-  border: 4px solid #b58550;
+  border: 4px solid var(--create-border-outer);
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden; 
-  box-shadow: 2px 0 8px rgba(0,0,0,0.3);
+  box-shadow: 2px 0 8px var(--shadow-light);
   display: none; 
   flex-direction: column;
 }
@@ -153,9 +153,9 @@ const isOpen = ref(false);
   content: '';
   position: absolute;
   inset: 0;
-  border: 4px solid #e0d68c;
+  border: 4px solid var(--create-border-inner);
   pointer-events: none;
-  box-shadow: inset 0 0 0 4px #32302b, inset -2px 0 4px rgba(0,0,0,0.3);
+  box-shadow: inset 0 0 0 4px var(--create-border-dark), inset -2px 0 4px var(--shadow-light);
   z-index: 20;
 }
 
@@ -172,7 +172,7 @@ const isOpen = ref(false);
 .hamburger-btn-narrow {
   background: transparent;
   border: none;
-  color: var(--create-brass-primary, #fde285);
+  color: var(--create-brass-primary);
   cursor: pointer;
   padding: 8px;
   border-radius: 6px;
@@ -182,8 +182,8 @@ const isOpen = ref(false);
   transition: all 0.2s ease;
 }
 .hamburger-btn-narrow:hover {
-  background: rgba(0, 0, 0, 0.2);
-  color: var(--create-brass-secondary, #f5cb6e);
+  background: var(--hover-darken);
+  color: var(--create-brass-secondary);
 }
 
 /* =========== 菜单列表样式 =========== */
@@ -204,7 +204,7 @@ const isOpen = ref(false);
   height: 52px;
   padding-left: 16px; 
   padding-right: 16px;
-  color: var(--create-brass-primary, #fde285);
+  color: var(--create-brass-primary);
   text-decoration: none;
   cursor: pointer;
   background: transparent;
@@ -213,15 +213,15 @@ const isOpen = ref(false);
 }
 
 .menu-item:hover {
-  background: rgba(0, 0, 0, 0.2);
-  color: #fff;
+  background: var(--hover-darken);
+  color: var(--text-on-dark);
 }
 
 .menu-item.active {
-  background: rgba(0, 0, 0, 0.4);
-  border-left: 4px solid var(--create-brass-secondary, #f5cb6e);
+  background: var(--active-darken);
+  border-left: 4px solid var(--create-brass-secondary);
   padding-left: 12px; 
-  color: var(--create-brass-primary, #fcf6bd);
+  color: var(--create-brass-primary);
 }
 
 .menu-icon {

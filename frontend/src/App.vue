@@ -189,7 +189,7 @@ function isInstanceRunning(status) {
 
 .page-title {
   margin: 0;
-  color: var(--create-brass-primary, #fde285);
+  color: var(--create-brass-primary);
   font-size: 16px;
   font-weight: bold;
   letter-spacing: 2px;
@@ -205,8 +205,8 @@ function isInstanceRunning(status) {
 
 .create-btn {
   padding: 8px 16px;
-  background-color: var(--create-brass-dark, #d8c49f);
-  color: #130c0c;
+  background-color: var(--create-brass-dark);
+  color: var(--card-text);
   border: none;
   border-radius: 4px;
   font-size: 14px;
@@ -238,9 +238,9 @@ function isInstanceRunning(status) {
 
 .empty-state {
   text-align: center;
-  color: #888;
+  color: var(--text-muted);
   padding: 40px;
-  border: 1px dashed #555;
+  border: 1px dashed var(--border-muted);
   border-radius: 8px;
 }
 
@@ -249,15 +249,13 @@ function isInstanceRunning(status) {
   justify-content: space-between;
   align-items: center;
   padding: 10px 20px; /* 增加上下纵深的内含空间，避免过粗的(12px)内连线压入核心文字中 */
-  background-color: #f8f8ec;
-  /* 左右与上下第一层统一外框: 同步加粗扩大至霸道的 6px 结构 */
-  border: 3px solid #000000;
-  /* 内侧阶层也严丝合缝扩展至 6px 与叠加的 12px 递进厚度进行包裹堆叠渲染 */
+  background-color: var(--card-bg);
+  border: 3px solid var(--card-border);
   box-shadow: 
-    inset 0 3px 0 0 #f8f8ec,
-    inset 0 -3px 0 0 #f8f8ec,
-    inset 0 6px 0 0 #cdbca8,
-    inset 0 -6px 0 0 #cdbca8;
+    inset 0 3px 0 0 var(--card-bg),
+    inset 0 -3px 0 0 var(--card-bg),
+    inset 0 6px 0 0 var(--card-border-inner),
+    inset 0 -6px 0 0 var(--card-border-inner);
   border-radius: 0;
   /* 裁掉四个角的 3px x 3px 方块，每个角用 3 个点走直角台阶 */
   clip-path: polygon(
@@ -280,7 +278,7 @@ function isInstanceRunning(status) {
 }
 
 .card-name {
-  color: #1a1a1a;
+  color: var(--card-text);
   font-size: 16px;
   font-weight: bold;
 }
@@ -294,17 +292,17 @@ function isInstanceRunning(status) {
 /* ======= 右侧按钮组件 ======= */
 .delete-btn {
   padding: 6px 16px;
-  background-color: rgba(255, 77, 79, 0.1);
-  color: #ff4d4f;
-  border: 1px solid #ff4d4f;
+  background-color: var(--danger-light);
+  color: var(--danger);
+  border: 1px solid var(--danger);
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .delete-btn:hover {
-  background-color: #ff4d4f;
-  color: #fff;
+  background-color: var(--danger);
+  color: var(--text-on-dark);
 }
 
 /* ======= 拉杆样式的开关 ======= */
@@ -325,7 +323,7 @@ function isInstanceRunning(status) {
   position: absolute;
   cursor: pointer;
   top: 0; left: 0; right: 0; bottom: 0;
-  background-color: #555;
+  background-color: var(--toggle-off);
   transition: .4s;
 }
 
@@ -341,11 +339,11 @@ function isInstanceRunning(status) {
 }
 
 input:checked + .slider {
-  background-color: #10b981; /* 开启时显现绿色 */
+  background-color: var(--toggle-on);
 }
 
 input:focus + .slider {
-  box-shadow: 0 0 1px #10b981;
+  box-shadow: 0 0 1px var(--toggle-on);
 }
 
 input:checked + .slider:before {
@@ -366,7 +364,7 @@ input:checked + .slider:before {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--modal-overlay);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -374,35 +372,34 @@ input:checked + .slider:before {
 }
 
 .modal-content {
-  background-color: #2a2a2a;
+  background-color: var(--modal-bg);
   padding: 20px;
   border-radius: 8px;
-  width: 360px; /* 恢复回原本觉得合适的宽度 */
-  border: 1px solid var(--create-brass-primary, #fde285);
+  width: 360px;
+  border: 1px solid var(--create-brass-primary);
   display: flex;
   flex-direction: column;
   gap: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 24px var(--shadow-medium);
 }
 
 .modal-content h3 {
   margin: 0;
-  color: var(--create-brass-primary, #fde285);
+  color: var(--create-brass-primary);
   font-size: 16px;
 }
 
 .modal-content input {
-  flex: none; /* 关键修复：阻止继承全局设置中 flex-basis 对高度造成的强制拉伸 */
   padding: 8px 10px;
-  background: #1a1a1a;
-  border: 1px solid #444;
-  color: #fff;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--text-on-dark);
   border-radius: 4px;
   outline: none;
 }
 
 .modal-content input:focus {
-  border-color: var(--create-brass-primary, #fde285);
+  border-color: var(--create-brass-primary);
 }
 
 .modal-actions {
@@ -416,20 +413,20 @@ input:checked + .slider:before {
   padding: 6px 12px;
   font-size: 13px;
   background: transparent;
-  border: 1px solid #666;
-  color: #ccc;
+  border: 1px solid var(--btn-secondary-border);
+  color: var(--btn-secondary-text);
   border-radius: 4px;
   cursor: pointer;
 }
 .btn-cancel:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--hover-lighten);
 }
 
 .btn-confirm {
   padding: 6px 12px;
   font-size: 13px;
-  background: var(--create-brass-dark, #c5a059);
-  color: #fff;
+  background: var(--create-brass-dark);
+  color: var(--text-on-dark);
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -442,9 +439,9 @@ input:checked + .slider:before {
 .output {
   margin-top: auto; 
   padding: 12px;
-  background: #1a1a1a;
-  color: #a9b7c6;
-  border: 1px solid #333;
+  background: var(--output-bg);
+  color: var(--output-text);
+  border: 1px solid var(--output-border);
   border-radius: 4px;
   min-height: 80px;
   max-height: 160px;
