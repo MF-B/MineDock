@@ -3,6 +3,12 @@
   --brown-500: #8F6051;
   --brown-600: #8c5c4e;
 
+  /* Create Theme Variables */
+  --create-brass-primary: #fcf6bd;
+  --create-brass-secondary: #f5cb6e;
+  --create-bg: #2f3538;
+  --create-bg-stripe: #343a3d;
+
   /* Semantic Variables */
   --bg-primary: var(--brown-500);
   --bg-secondary: var(--brown-600);
@@ -34,8 +40,7 @@ body {
       var(--bg-primary) 0px,
       var(--bg-primary) var(--bg-stripe-size),
       var(--bg-secondary) var(--bg-stripe-size),
-      var(--bg-secondary) var(--bg-stripe-cycle)
-    );
+      var(--bg-secondary) var(--bg-stripe-cycle));
   background-repeat: repeat;
   background-size: 100% var(--bg-stripe-cycle);
   display: flex;
@@ -44,9 +49,9 @@ body {
 }
 
 #app {
-  width: 100%;
-  display: grid;
-  place-items: center;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
 }
 
 .panel {
@@ -56,6 +61,7 @@ body {
   border-radius: 16px;
   padding: 20px;
   box-shadow: 0 10px 26px rgba(32, 90, 53, 0.12);
+  margin: auto;
 }
 
 h1 {

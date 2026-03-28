@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from "vue";
+import Sidebar from "./components/Sidebar.vue";
 import {
   createInstance,
   deleteInstance,
@@ -92,8 +93,15 @@ async function handleStop() {
 </script>
 
 <template>
-  <main class="panel">
-    <h1>MineDock MVP 控制台</h1>
+  <Sidebar />
+  <div class="page-wrapper">
+    <!-- 与左侧汉堡按钮等高的 60px 透明顶部栏 -->
+    <header class="page-header">
+      <h1 class="page-title">容器列表</h1>
+    </header>
+    
+    <main class="panel">
+      <h1>MineDock MVP 控制台</h1>
 
     <div class="actions">
       <button @click="handleList">获取列表</button>
@@ -109,5 +117,42 @@ async function handleStop() {
     </div>
 
     <pre class="output">{{ output }}</pre>
-  </main>
+    </main>
+  </div>
 </template>
+
+<style scoped>
+.page-wrapper {
+  flex: 1; /* 占据侧边栏右侧的全部剩余空间 */
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.page-header {
+  height: 60px; /* 严格对齐左侧固定侧边栏的 60px 图标容器 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  /* 透明顶部栏无需背景色 */
+}
+
+.page-title {
+  margin: 0; /* 之前用 margin 往下推，现在由 flex 完美垂直居中 */
+  color: var(--create-brass-primary, #fde285);
+  font-size: 24px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  font-family: 'Segoe UI', "PingFang SC", sans-serif;
+}
+
+/* =========== 响应式标题隐藏 =========== */
+@media (max-width: 1023px) {
+  .page-header {
+    display: none;
+  }
+}
+</style>
