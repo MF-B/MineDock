@@ -14,6 +14,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// ErrNameExists indicates that an instance name is already in use.
 var ErrNameExists = errors.New("instance name already exists")
 
 // SQLiteStore persists instance state in a local SQLite database.
@@ -21,6 +22,7 @@ type SQLiteStore struct {
 	db *sql.DB
 }
 
+// NewSQLiteStore opens SQLite at dbPath and initializes required schema.
 func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	cleanPath := strings.TrimSpace(dbPath)
 	if cleanPath == "" {
@@ -36,7 +38,8 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("open sqlite db: %w", err)
 	}
 
-	// SQLite works best with a single writer connection in this MVP.
+	// NOTE: SQLite works best with a single writer connection in this MVP.
+	// TODO(minedock): Revisit connection strategy when write throughput requirements grow.
 	db.SetMaxOpenConns(1)
 
 	if err := db.Ping(); err != nil {
@@ -53,6 +56,7 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	return s, nil
 }
 
+// Close releases the underlying SQLite database connection.
 func (s *SQLiteStore) Close() error {
 	if s == nil || s.db == nil {
 		return nil
@@ -60,6 +64,7 @@ func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
 
+// InitSchema creates storage tables when they do not exist.
 func (s *SQLiteStore) InitSchema(ctx context.Context) error {
 	const schema = `
 CREATE TABLE IF NOT EXISTS instances (
@@ -76,6 +81,7 @@ CREATE TABLE IF NOT EXISTS instances (
 	return nil
 }
 
+// Save upserts one instance row by container id.
 func (s *SQLiteStore) Save(ctx context.Context, instance model.Instance) error {
 	const upsert = `
 INSERT INTO instances(container_id, name, status)
@@ -97,6 +103,7 @@ DO UPDATE SET
 	return nil
 }
 
+// Delete removes one instance row by container id.
 func (s *SQLiteStore) Delete(ctx context.Context, containerID string) error {
 	if _, err := s.db.ExecContext(ctx, "DELETE FROM instances WHERE container_id = ?", containerID); err != nil {
 		return fmt.Errorf("delete instance: %w", err)
@@ -104,6 +111,7 @@ func (s *SQLiteStore) Delete(ctx context.Context, containerID string) error {
 	return nil
 }
 
+// Get returns one instance row by container id.
 func (s *SQLiteStore) Get(ctx context.Context, containerID string) (model.Instance, bool, error) {
 	const q = `
 SELECT container_id, name, status
@@ -122,6 +130,7 @@ WHERE container_id = ?;
 	return inst, true, nil
 }
 
+// List returns all instance rows ordered by creation time descending.
 func (s *SQLiteStore) List(ctx context.Context) ([]model.Instance, error) {
 	const q = `
 SELECT container_id, name, status
@@ -151,6 +160,9 @@ ORDER BY created_at DESC;
 	return out, nil
 }
 
+// isUniqueNameErr reports whether err is a unique constraint violation for instances.name.
+// NOTE: This currently relies on matching SQLite error text.
+// TODO(minedock): Replace text matching with SQLite error-code based detection.
 func isUniqueNameErr(err error) bool {
 	if err == nil {
 		return false
