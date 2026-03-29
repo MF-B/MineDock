@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { RouterLink } from "vue-router";
 
 const isOpen = ref<boolean>(false);
 </script>
@@ -19,15 +20,15 @@ const isOpen = ref<boolean>(false);
       <div class="mobile-header"></div>
       <div class="sidebar-content">
         <!-- 导航菜单项 -->
-        <a href="#" class="menu-item active" @click.prevent>
+        <RouterLink to="/" class="menu-item">
           <div class="menu-icon">
             <svg viewBox="0 0 24 24" fill="currentColor">
-              <!-- 象征“容器/集装箱”的图标 -->
+              <!-- 象征"容器/集装箱"的图标 -->
               <path d="M4 8h16v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8zm0-4h16v2H4V4z" />
             </svg>
           </div>
           <div class="menu-text">{{ $t("sidebar.containerList") }}</div>
-        </a>
+        </RouterLink>
       </div>
     </aside>
   </Transition>
@@ -44,14 +45,14 @@ const isOpen = ref<boolean>(false);
 
     <div class="sidebar-content">
       <!-- 导航菜单项 -->
-      <a href="#" class="menu-item active" @click.prevent>
+      <RouterLink to="/" class="menu-item">
         <div class="menu-icon">
           <svg viewBox="0 0 24 24" fill="currentColor">
             <path d="M4 8h16v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8zm0-4h16v2H4V4z" />
           </svg>
         </div>
         <div class="menu-text">{{ $t("sidebar.containerList") }}</div>
-      </a>
+      </RouterLink>
     </div>
   </aside>
 </template>
@@ -223,7 +224,7 @@ const isOpen = ref<boolean>(false);
   color: var(--text-on-dark);
 }
 
-.menu-item.active {
+.menu-item:is(.router-link-exact-active) {
   background: var(--active-darken);
   border-left: 4px solid var(--create-brass-secondary);
   padding-left: 12px;

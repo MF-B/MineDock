@@ -13,12 +13,29 @@ export const useContainerStore = defineStore("containers", () => {
   const instances = ref<Instance[]>([]);
   const output = ref<string>("");
 
+  function getErrorMessage(error: unknown): string {
+    if (error instanceof Error) return error.message;
+    if (typeof error === "string") return error;
+    if (error && typeof error === "object") {
+      const maybeMessage = (error as { message?: unknown }).message;
+      if (typeof maybeMessage === "string" && maybeMessage.trim().length > 0) {
+        return maybeMessage;
+      }
+      try {
+        return JSON.stringify(error);
+      } catch {
+        return String(error);
+      }
+    }
+    return String(error);
+  }
+
   function print(data: unknown): void {
     output.value = typeof data === "string" ? data : JSON.stringify(data, null, 2);
   }
 
-  function printError(error: Error): void {
-    output.value = `ERROR: ${error.message}`;
+  function printError(error: unknown): void {
+    output.value = `ERROR: ${getErrorMessage(error)}`;
   }
 
   async function fetchInstances(): Promise<boolean> {
@@ -27,7 +44,7 @@ export const useContainerStore = defineStore("containers", () => {
       instances.value = data;
       return true;
     } catch (err) {
-      printError(err as Error);
+      printError(err);
       return false;
     }
   }
@@ -39,7 +56,7 @@ export const useContainerStore = defineStore("containers", () => {
       await fetchInstances();
       return true;
     } catch (err) {
-      printError(err as Error);
+      printError(err);
       return false;
     }
   }
@@ -50,7 +67,7 @@ export const useContainerStore = defineStore("containers", () => {
       print(data);
       await fetchInstances();
     } catch (err) {
-      printError(err as Error);
+      printError(err);
     }
   }
 
@@ -64,7 +81,7 @@ export const useContainerStore = defineStore("containers", () => {
         await apiStart(instance.container_id);
       }
     } catch (err) {
-      printError(err as Error);
+      printError(err);
       success = false;
     } finally {
       await fetchInstances();

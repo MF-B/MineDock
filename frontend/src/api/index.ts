@@ -1,14 +1,41 @@
 const BASE_URL: string =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || "/api";
 
-interface RequestOptions extends RequestInit {
-  headers?: Record<string, string>;
+type JsonObject = Record<string, unknown>;
+
+interface RequestOptions extends Omit<RequestInit, "headers" | "body"> {
+  headers?: HeadersInit;
+  body?: BodyInit | JsonObject | null;
+}
+
+function isPlainObject(value: unknown): value is JsonObject {
+  return Object.prototype.toString.call(value) === "[object Object]";
 }
 
 async function request<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { headers: customHeaders, body, ...rest } = options;
+  const headers = new Headers(customHeaders);
+
+  let finalBody: BodyInit | undefined;
+  if (body == null) {
+    finalBody = undefined;
+  } else if (isPlainObject(body)) {
+    finalBody = JSON.stringify(body);
+    if (!headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+  } else {
+    finalBody = body;
+  }
+
+  if (!headers.has("Accept")) {
+    headers.set("Accept", "application/json");
+  }
+
   const resp = await fetch(`${BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
+    ...rest,
+    headers,
+    body: finalBody,
   });
 
   const data = await resp.json().catch(() => ({}));
@@ -32,7 +59,7 @@ export function listInstances(): Promise<Instance[]> {
 export function createInstance(name: string): Promise<unknown> {
   return request("/instances", {
     method: "POST",
-    body: JSON.stringify({ name }),
+    body: { name },
   });
 }
 
