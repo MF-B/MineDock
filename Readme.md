@@ -3,16 +3,8 @@
 轻量级游戏服务器容器化管理平台。
 
 ## 运行指南
-
-### Task 命令
 ```bash
 task dev               # 一键启动前后端开发服务
-task fmt               # 执行全局格式检查（当前依赖 backend:fmt）
-task vet               # 执行全局静态检查（当前依赖 backend:vet）
-task test              # 执行全局测试（当前依赖 backend:test）
-task build             # 统一编译前后端
-task clean             # 清理构建产物
-task frontend:install  # 安装前端依赖
 ```
 
 ## 待办清单
