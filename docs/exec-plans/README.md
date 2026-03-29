@@ -68,5 +68,5 @@
 
 ## TODO 索引生成
 
-- 运行 `task docs:todo` 可从仓库注释中的 `TODO(username): 描述` 自动生成 `docs/exec-plans/TODO.md`。
+- 运行 `task docs:todo` 可从仓库注释中的 `TODO: 描述` 自动生成 `docs/exec-plans/TODO.md`。
 - 生成文件用于集中追踪技术债与改进事项，建议在提交前执行一次。

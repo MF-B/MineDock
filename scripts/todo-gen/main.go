@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-var todoPattern = regexp.MustCompile(`TODO\(([^)]+)\):\s*(.+)$`)
+var todoPattern = regexp.MustCompile(`TODO(?:\(([^)]+)\))?:\s*(.+)$`)
 
 type todoItem struct {
 	Owner string
@@ -80,7 +80,7 @@ func collectTODOItems(root string) ([]todoItem, error) {
 		for scanner.Scan() {
 			lineNo++
 			line := scanner.Text()
-			idx := strings.Index(line, "TODO(")
+			idx := strings.Index(line, "TODO")
 			if idx < 0 || !isLikelyCommentLine(line, idx) {
 				continue
 			}
@@ -94,7 +94,7 @@ func collectTODOItems(root string) ([]todoItem, error) {
 			text := strings.TrimSpace(matches[2])
 			text = strings.TrimSuffix(text, "*/")
 			text = strings.TrimSpace(text)
-			if owner == "" || text == "" {
+			if text == "" {
 				continue
 			}
 
@@ -189,7 +189,7 @@ func writeMarkdown(root, outPath string, items []todoItem) error {
 	if _, err := fmt.Fprintf(f, "\nGenerated at: %s\n", now); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintln(f, "Source pattern: TODO(username): description"); err != nil {
+	if _, err := fmt.Fprintln(f, "Source pattern: TODO: description"); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(f, "Repository root: %s\n", filepath.ToSlash(root)); err != nil {
@@ -215,6 +215,12 @@ func writeMarkdown(root, outPath string, items []todoItem) error {
 	}
 
 	for _, item := range items {
+		if item.Owner == "" {
+			if _, err := fmt.Fprintf(f, "- [ ] %s (%s:%d)\n", item.Text, item.Path, item.Line); err != nil {
+				return err
+			}
+			continue
+		}
 		if _, err := fmt.Fprintf(f, "- [ ] %s: %s (%s:%d)\n", item.Owner, item.Text, item.Path, item.Line); err != nil {
 			return err
 		}
