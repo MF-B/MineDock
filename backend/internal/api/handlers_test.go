@@ -11,7 +11,7 @@ import (
 	"minedock/backend/internal/model"
 )
 
-// mockService implements InstanceService for handler tests.
+// mockService 为 Handler 测试实现 InstanceService。
 type mockService struct {
 	listFn   func(ctx context.Context) ([]model.Instance, error)
 	createFn func(ctx context.Context, name string) (string, error)
@@ -41,7 +41,7 @@ func newTestRouter(m *mockService) http.Handler {
 	return NewRouter(h)
 }
 
-// --- GET /api/instances ---
+// --- GET /api/instances 场景 ---
 
 func TestGetInstances_Success(t *testing.T) {
 	router := newTestRouter(&mockService{
@@ -85,7 +85,7 @@ func TestGetInstances_Error(t *testing.T) {
 	}
 }
 
-// --- POST /api/instances ---
+// --- POST /api/instances 场景 ---
 
 func TestCreateInstance_Success(t *testing.T) {
 	router := newTestRouter(&mockService{
@@ -155,7 +155,7 @@ func TestCreateInstance_NameConflict(t *testing.T) {
 	}
 }
 
-// --- POST /api/instances/{id}/start ---
+// --- POST /api/instances/{id}/start 场景 ---
 
 func TestStartInstance_Success(t *testing.T) {
 	router := newTestRouter(&mockService{
@@ -192,7 +192,7 @@ func TestStartInstance_Error(t *testing.T) {
 	}
 }
 
-// --- POST /api/instances/{id}/stop ---
+// --- POST /api/instances/{id}/stop 场景 ---
 
 func TestStopInstance_Success(t *testing.T) {
 	router := newTestRouter(&mockService{
@@ -213,7 +213,7 @@ func TestStopInstance_Success(t *testing.T) {
 	}
 }
 
-// --- DELETE /api/instances/{id} ---
+// --- DELETE /api/instances/{id} 场景 ---
 
 func TestDeleteInstance_Success(t *testing.T) {
 	router := newTestRouter(&mockService{
@@ -250,7 +250,7 @@ func TestDeleteInstance_Running(t *testing.T) {
 	}
 }
 
-// errTest is a generic error used in test stubs.
+// errTest 是测试桩使用的通用错误。
 var errTest = errorString("test error")
 
 type errorString string

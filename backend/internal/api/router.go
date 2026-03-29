@@ -2,7 +2,7 @@ package api
 
 import "net/http"
 
-// NewRouter registers API endpoints and wraps them with HTTP middleware.
+// NewRouter 注册 API 路由并包装中间件。
 func NewRouter(h *Handler) http.Handler {
 	mux := http.NewServeMux()
 
@@ -15,7 +15,7 @@ func NewRouter(h *Handler) http.Handler {
 	return withCORS(mux)
 }
 
-// withCORS adds permissive CORS headers and handles OPTIONS preflight requests.
+// withCORS 添加宽松的 CORS 响应头并处理 OPTIONS 预检请求。
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")

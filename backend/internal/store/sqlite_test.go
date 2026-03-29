@@ -124,7 +124,7 @@ func TestDelete_NonExistent(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	// Deleting a non-existent row should not error.
+	// 删除不存在的记录不应返回错误。
 	if err := s.Delete(ctx, "nonexistent"); err != nil {
 		t.Fatalf("delete non-existent: %v", err)
 	}
