@@ -38,7 +38,3 @@ task frontend:install  # 安装前端依赖
 - [ ] 可视化 Web 文件浏览器
 - [ ] 游戏基础配置文件的在线文本编辑器
 - [ ] 大文件 (Mod/插件) 上传及在线解压缩
-
-## 注意事项
-默认 SQLite 数据库路径为 `backend/data/minedock.db`（在 `backend` 目录启动时对应 `data/minedock.db`）。
-可通过环境变量 `MINEDOCK_DB_PATH` 覆盖。
