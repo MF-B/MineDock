@@ -58,6 +58,18 @@ tasks:
     cmds:
       - npm run build
 
+  frontend:lint:
+    desc: Run frontend ESLint checks
+    dir: frontend
+    cmds:
+      - npm run lint
+
+  frontend:fmt:
+    desc: Run frontend Prettier format checks
+    dir: frontend
+    cmds:
+      - npm run format:check
+
   dev:
     desc: Run backend and frontend dev servers in parallel
     deps:
@@ -79,6 +91,12 @@ tasks:
     desc: Run global formatting checks
     deps:
       - backend:fmt
+      - frontend:fmt
+
+  lint:
+    desc: Run global lint checks
+    deps:
+      - frontend:lint
 
   vet:
     desc: Run global vet checks

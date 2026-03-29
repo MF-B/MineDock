@@ -1,0 +1,36 @@
+{
+  "containers": {
+    "title": "容器列表",
+    "createBtn": "新建容器",
+    "emptyState": "暂无容器，请点击右上角新建容器。",
+    "delete": "删除",
+    "toggleTitle": "开启/关闭",
+    "confirmDelete": "确认彻底删除该容器吗？"
+  },
+  "createModal": {
+    "title": "新建容器",
+    "placeholder": "请输入新容器名称...",
+    "cancel": "取消",
+    "confirm": "确定"
+  },
+  "status": {
+    "waiting": "等待操作...",
+    "listRefreshed": "已刷新容器列表。",
+    "noContainers": "当前暂无容器。",
+    "emptyName": "容器名称不能为空",
+    "creating": "正在创建容器...",
+    "deleting": "正在删除容器...",
+    "stopping": "正在关闭容器: {name}...",
+    "stopSuccess": "容器 {name} 请求关闭成功",
+    "starting": "正在开启容器: {name}...",
+    "startSuccess": "容器 {name} 请求开启成功"
+  },
+  "sidebar": {
+    "containerList": "容器列表"
+  },
+  "topbar": {
+    "switchLanguage": "切换语言",
+    "zhCN": "简体中文",
+    "enUS": "English"
+  }
+}

@@ -33,6 +33,12 @@ jobs:
       - name: Install frontend dependencies
         run: task frontend:install
 
+      - name: Run frontend format checks
+        run: task frontend:fmt
+
+      - name: Run frontend lint checks
+        run: task frontend:lint
+
       - name: Build frontend once
         run: task frontend:build
 

@@ -1,0 +1,36 @@
+{
+  "containers": {
+    "title": "Containers",
+    "createBtn": "New Container",
+    "emptyState": "No containers yet. Click the button above to create one.",
+    "delete": "Delete",
+    "toggleTitle": "Start/Stop",
+    "confirmDelete": "Are you sure you want to permanently delete this container?"
+  },
+  "createModal": {
+    "title": "New Container",
+    "placeholder": "Enter container name...",
+    "cancel": "Cancel",
+    "confirm": "OK"
+  },
+  "status": {
+    "waiting": "Waiting for action...",
+    "listRefreshed": "Container list refreshed.",
+    "noContainers": "No containers available.",
+    "emptyName": "Container name cannot be empty",
+    "creating": "Creating container...",
+    "deleting": "Deleting container...",
+    "stopping": "Stopping container: {name}...",
+    "stopSuccess": "Container {name} stop request sent",
+    "starting": "Starting container: {name}...",
+    "startSuccess": "Container {name} start request sent"
+  },
+  "sidebar": {
+    "containerList": "Containers"
+  },
+  "topbar": {
+    "switchLanguage": "Switch Language",
+    "zhCN": "简体中文",
+    "enUS": "English"
+  }
+}

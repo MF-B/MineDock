@@ -1,10 +1,65 @@
 :root {
-  --bg: #f3f6f2;
-  --card: #ffffff;
+  /* ===== 基础色板 ===== */
+  --brown-500: #8f6051;
+  --brown-600: #8c5c4e;
+
+  /* ===== Create 主题变量 ===== */
+  --create-brass-primary: #fcf6bd;
+  --create-brass-secondary: #f5cb6e;
+  --create-brass-dark: #d8c49f;
+  --create-bg: #2f3538;
+  --create-bg-stripe: #343a3d;
+  --create-border-outer: #b58550;
+  --create-border-inner: #e0d68c;
+  --create-border-dark: #32302b;
+
+  /* ===== 语义变量 ===== */
+  --bg-primary: var(--brown-500);
+  --bg-secondary: var(--brown-600);
   --ink: #1d2a22;
-  --accent: #2f7d4a;
-  --accent-strong: #205a35;
-  --border: #d5e2d8;
+  --text-on-dark: #ffffff;
+  --text-muted: #888888;
+  --border-muted: #555555;
+
+  /* ===== 功能色 ===== */
+  --danger: #ff4d4f;
+  --danger-light: rgba(255, 77, 79, 0.1);
+  --success: #10b981;
+
+  /* ===== 卡片变量 ===== */
+  --card-bg: #f8f8ec;
+  --card-border: #000000;
+  --card-border-inner: #cdbca8;
+  --card-text: #1a1a1a;
+
+  /* ===== 输入框与弹窗 ===== */
+  --modal-bg: #2a2a2a;
+  --modal-overlay: rgba(0, 0, 0, 0.6);
+  --input-bg: #1a1a1a;
+  --input-border: #444444;
+  --btn-secondary-border: #666666;
+  --btn-secondary-text: #cccccc;
+
+  /* ===== 开关 ===== */
+  --toggle-off: #555555;
+  --toggle-on: var(--success);
+
+  /* ===== 输出区 ===== */
+  --output-bg: #1a1a1a;
+  --output-text: #a9b7c6;
+  --output-border: #333333;
+
+  /* ===== 交互反馈 ===== */
+  --hover-darken: rgba(0, 0, 0, 0.2);
+  --hover-lighten: rgba(255, 255, 255, 0.1);
+  --active-darken: rgba(0, 0, 0, 0.4);
+  --shadow-medium: rgba(0, 0, 0, 0.5);
+  --shadow-light: rgba(0, 0, 0, 0.3);
+
+  /* ===== 布局变量 ===== */
+  --header-height: 48px;
+  --bg-stripe-size: 6px;
+  --bg-stripe-cycle: 12px;
 }
 
 * {
@@ -13,79 +68,28 @@
 
 body {
   margin: 0;
+  padding: 0;
+  height: 100vh;
+  width: 100vw;
   font-family: "Segoe UI", "PingFang SC", sans-serif;
   color: var(--ink);
-  background:
-    radial-gradient(circle at 10% 10%, #d9ead8, transparent 35%),
-    radial-gradient(circle at 90% 90%, #d8e8ea, transparent 35%),
-    var(--bg);
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
+  background-color: var(--bg-primary);
+  background-image: repeating-linear-gradient(
+    180deg,
+    var(--bg-primary) 0px,
+    var(--bg-primary) var(--bg-stripe-size),
+    var(--bg-secondary) var(--bg-stripe-size),
+    var(--bg-secondary) var(--bg-stripe-cycle)
+  );
+  background-repeat: repeat;
+  background-size: 100% var(--bg-stripe-cycle);
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 #app {
-  width: 100%;
-  display: grid;
-  place-items: center;
-}
-
-.panel {
-  width: min(820px, 92vw);
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 10px 26px rgba(32, 90, 53, 0.12);
-}
-
-h1 {
-  margin: 0 0 14px;
-  font-size: 24px;
-}
-
-.actions {
+  width: 100vw;
+  height: 100vh;
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-button {
-  border: 0;
-  background: var(--accent);
-  color: #fff;
-  padding: 10px 14px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-button:hover {
-  background: var(--accent-strong);
-}
-
-.field {
-  margin-top: 14px;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-input {
-  flex: 1 1 280px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-}
-
-.output {
-  margin-top: 14px;
-  padding: 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: #f9fcf9;
-  min-height: 190px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  font-family: Consolas, "Courier New", monospace;
 }
