@@ -68,5 +68,6 @@
 ### 测试
 
 - 后端测试入口：`task backend:test`（`go test ./...`）。
+- Lint 检查：`task backend:lint`（`golangci-lint run ./...`）。
 - 静态检查：`task backend:vet`（`go vet ./...`）。
-- 提交前最低门禁建议：`task fmt && task vet && task test && task build`。
+- 提交前最低门禁建议：`task fmt && task lint && task vet && task test && task build`。

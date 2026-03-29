@@ -27,6 +27,12 @@ tasks:
     cmds:
       - go vet ./...
 
+  backend:lint:
+    desc: Run backend golangci-lint checks
+    dir: backend
+    cmds:
+      - go run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run --config .golangci.yml ./...
+
   backend:test:
     desc: Run backend tests
     dir: backend
@@ -70,6 +76,11 @@ tasks:
     cmds:
       - npm run format:check
 
+  docs:todo:
+    desc: Generate docs/exec-plans/TODO.md from TODO comments
+    cmds:
+      - go run ./scripts/todo-gen/main.go -root .. -out ../docs/exec-plans/TODO.md
+
   dev:
     desc: Run backend and frontend dev servers in parallel
     deps:
@@ -96,6 +107,7 @@ tasks:
   lint:
     desc: Run global lint checks
     deps:
+      - backend:lint
       - frontend:lint
 
   vet:
