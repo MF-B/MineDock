@@ -1,21 +1,31 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
-	"minedock/backend/internal/service"
-	"minedock/backend/internal/store"
+	"minedock/backend/internal/model"
 )
+
+// InstanceService defines the business operations called by API handlers.
+type InstanceService interface {
+	ListInstances(ctx context.Context) ([]model.Instance, error)
+	CreateInstance(ctx context.Context, name string) (string, error)
+	StartInstance(ctx context.Context, containerID string) error
+	StopInstance(ctx context.Context, containerID string) error
+	DeleteInstance(ctx context.Context, containerID string) error
+}
 
 // Handler exposes HTTP handlers.
 type Handler struct {
-	svc *service.DockerService
+	svc InstanceService
 }
 
-// NewHandler creates a Handler with the provided Docker service.
-func NewHandler(svc *service.DockerService) *Handler {
+// NewHandler creates a Handler with the provided instance service.
+func NewHandler(svc InstanceService) *Handler {
 	return &Handler{svc: svc}
 }
 
@@ -64,7 +74,7 @@ func (h *Handler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		code := http.StatusInternalServerError
 		// NOTE: Keep domain error to HTTP status mapping consistent across handlers.
-		if err == store.ErrNameExists {
+		if errors.Is(err, model.ErrNameExists) {
 			code = http.StatusConflict
 		}
 		writeJSON(w, code, statusResponse{Status: "error", Error: err.Error()})
@@ -119,7 +129,7 @@ func (h *Handler) DeleteInstance(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.DeleteInstance(r.Context(), id); err != nil {
 		code := http.StatusInternalServerError
 		// NOTE: Keep domain error to HTTP status mapping consistent across handlers.
-		if err == service.ErrInstanceRunning {
+		if errors.Is(err, model.ErrInstanceRunning) {
 			code = http.StatusConflict
 		}
 		writeJSON(w, code, statusResponse{Status: "error", Error: err.Error()})

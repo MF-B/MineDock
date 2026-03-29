@@ -11,11 +11,10 @@ import (
 
 	"minedock/backend/internal/model"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // SQLite driver registration
 )
 
-// ErrNameExists indicates that an instance name is already in use.
-var ErrNameExists = errors.New("instance name already exists")
+
 
 // SQLiteStore persists instance state in a local SQLite database.
 type SQLiteStore struct {
@@ -95,7 +94,7 @@ DO UPDATE SET
 	_, err := s.db.ExecContext(ctx, upsert, instance.ContainerID, instance.Name, instance.Status)
 	if err != nil {
 		if isUniqueNameErr(err) {
-			return ErrNameExists
+			return model.ErrNameExists
 		}
 		return fmt.Errorf("save instance: %w", err)
 	}

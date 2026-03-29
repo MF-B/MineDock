@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -13,11 +12,7 @@ import (
 	"github.com/docker/docker/client"
 
 	"minedock/backend/internal/model"
-	"minedock/backend/internal/store"
 )
-
-// ErrInstanceRunning indicates the instance is running and must be stopped before delete.
-var ErrInstanceRunning = errors.New("instance is running, stop it before delete")
 
 const (
 	managedLabelKey   = "minedock.managed"
@@ -26,19 +21,26 @@ const (
 	defaultImage      = "alpine:latest"
 )
 
+// InstanceStore defines the persistence operations needed by DockerService.
+type InstanceStore interface {
+	Save(ctx context.Context, inst model.Instance) error
+	Get(ctx context.Context, containerID string) (model.Instance, bool, error)
+	Delete(ctx context.Context, containerID string) error
+}
+
 // DockerService contains business logic for container management.
 type DockerService struct {
 	cli   *client.Client
-	store *store.SQLiteStore
+	store InstanceStore
 	image string
 }
 
 // NewDockerService creates a DockerService with its dependencies and runtime image.
-func NewDockerService(cli *client.Client, sqliteStore *store.SQLiteStore, imageName string) *DockerService {
+func NewDockerService(cli *client.Client, s InstanceStore, imageName string) *DockerService {
 	if strings.TrimSpace(imageName) == "" {
 		imageName = defaultImage
 	}
-	return &DockerService{cli: cli, store: sqliteStore, image: imageName}
+	return &DockerService{cli: cli, store: s, image: imageName}
 }
 
 // CreateInstance creates a managed container and persists its metadata.
@@ -81,7 +83,7 @@ func (s *DockerService) StartInstance(ctx context.Context, containerID string) e
 		return err
 	}
 	if err := s.store.Save(ctx, inst); err != nil {
-		return err
+		return fmt.Errorf("save instance state: %w", err)
 	}
 
 	return nil
@@ -99,7 +101,7 @@ func (s *DockerService) StopInstance(ctx context.Context, containerID string) er
 		return err
 	}
 	if err := s.store.Save(ctx, inst); err != nil {
-		return err
+		return fmt.Errorf("save instance state: %w", err)
 	}
 
 	return nil
@@ -150,14 +152,14 @@ func (s *DockerService) DeleteInstance(ctx context.Context, containerID string) 
 	}
 
 	if inspect.State != nil && inspect.State.Running {
-		return ErrInstanceRunning
+		return model.ErrInstanceRunning
 	}
 
 	if err := s.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: false}); err != nil {
 		return fmt.Errorf("remove container: %w", err)
 	}
 	if err := s.store.Delete(ctx, containerID); err != nil {
-		return err
+		return fmt.Errorf("delete instance record: %w", err)
 	}
 	return nil
 }
