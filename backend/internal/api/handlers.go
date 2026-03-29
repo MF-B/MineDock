@@ -72,12 +72,7 @@ func (h *Handler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 
 	id, err := h.svc.CreateInstance(r.Context(), req.Name)
 	if err != nil {
-		code := http.StatusInternalServerError
-		// 说明：保持领域错误到 HTTP 状态码的映射在各 Handler 中一致。
-		if errors.Is(err, model.ErrNameExists) {
-			code = http.StatusConflict
-		}
-		writeJSON(w, code, statusResponse{Status: "error", Error: err.Error()})
+		writeJSON(w, mapErrorCode(err), statusResponse{Status: "error", Error: err.Error()})
 		return
 	}
 
@@ -127,12 +122,7 @@ func (h *Handler) DeleteInstance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.DeleteInstance(r.Context(), id); err != nil {
-		code := http.StatusInternalServerError
-		// 说明：保持领域错误到 HTTP 状态码的映射在各 Handler 中一致。
-		if errors.Is(err, model.ErrInstanceRunning) {
-			code = http.StatusConflict
-		}
-		writeJSON(w, code, statusResponse{Status: "error", Error: err.Error()})
+		writeJSON(w, mapErrorCode(err), statusResponse{Status: "error", Error: err.Error()})
 		return
 	}
 
@@ -146,6 +136,18 @@ func pathContainerID(r *http.Request) (string, bool) {
 		return "", false
 	}
 	return id, true
+}
+
+// mapErrorCode 将领域错误统一映射为 HTTP 状态码。
+func mapErrorCode(err error) int {
+	switch {
+	case errors.Is(err, model.ErrNameExists):
+		return http.StatusConflict
+	case errors.Is(err, model.ErrInstanceRunning):
+		return http.StatusConflict
+	default:
+		return http.StatusInternalServerError
+	}
 }
 
 // writeJSON 按指定状态码写入 JSON 响应。

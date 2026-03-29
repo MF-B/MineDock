@@ -66,7 +66,7 @@ func (s *DockerService) CreateInstance(ctx context.Context, name string) (string
 	if err := s.store.Save(ctx, inst); err != nil {
 		// 说明：请求上下文取消时，清理逻辑会使用独立上下文做尽力回收。
 		_ = s.cli.ContainerRemove(context.Background(), resp.ID, container.RemoveOptions{Force: true})
-		return "", err
+		return "", fmt.Errorf("save instance record: %w", err)
 	}
 
 	return resp.ID, nil
@@ -169,7 +169,7 @@ func (s *DockerService) DeleteInstance(ctx context.Context, containerID string) 
 func (s *DockerService) readInstance(ctx context.Context, containerID string, fallbackStatus string) (model.Instance, error) {
 	inst, ok, err := s.store.Get(ctx, containerID)
 	if err != nil {
-		return model.Instance{}, err
+		return model.Instance{}, fmt.Errorf("read instance: %w", err)
 	}
 	if ok {
 		// 说明：命中存储后仍会应用调用方传入的兜底状态。
