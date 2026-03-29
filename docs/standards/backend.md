@@ -40,9 +40,11 @@
 
 ### 依赖注入
 
-- 接口原则：Service 层定义的依赖接口应尽量“小”。
-- 构造函数：组件通过 `New...` 函数初始化，并在此处注入依赖（如 `func NewService(s Store) *Service`）。
-- 解耦：Handler 仅负责解析请求、调用 Service、返回 Response。禁止在 Handler 直接操作 Docker SDK 或 SQL。
+- 构造函数：组件通过 `New...` 函数初始化，并在此处注入依赖。
+- 接口定义：**消费方**在自己的包中定义所需接口（Go 惯例），
+  接口应尽量小，仅包含实际调用的方法。
+- 解耦底线：Handler 禁止直接操作 Docker SDK 或 SQL，
+  仅通过 Service 层暴露的接口交互。
 
 ## 4. 数据与存储
 
