@@ -9,7 +9,7 @@ tasks:
     cmds:
       - go run main.go
 
-  backend:fmt:
+  backend:fmt:check:
     desc: Verify backend Go formatting
     dir: backend
     cmds:
@@ -20,6 +20,12 @@ tasks:
             echo "$UNFORMATTED"
             exit 1
           fi
+
+  backend:fmt:fix:
+    desc: Format backend Go files with gofmt
+    dir: backend
+    cmds:
+      - gofmt -w .
 
   backend:vet:
     desc: Run backend go vet checks
@@ -70,16 +76,58 @@ tasks:
     cmds:
       - npm run lint
 
-  frontend:fmt:
+  frontend:fmt:check:
     desc: Run frontend Prettier format checks
     dir: frontend
     cmds:
       - npm run format:check
 
+  frontend:fmt:fix:
+    desc: Format frontend files with Prettier
+    dir: frontend
+    cmds:
+      - npm run format
+
   docs:todo:
     desc: Generate docs/exec-plans/TODO.md from TODO comments
     cmds:
       - go run ./scripts/todo-gen/main.go -root .. -out ../docs/exec-plans/TODO.md
+
+  docs:lint:rules:
+    desc: Run Markdown rule checks for the knowledge base
+    cmds:
+      - npx --yes markdownlint-cli2 "AGENTS.md" "Readme.md" "docs/**/*.md"
+
+  docs:lint:rules:fix:
+    desc: Auto-fix Markdown rule violations where possible
+    cmds:
+      - npx --yes markdownlint-cli2 --fix "AGENTS.md" "Readme.md" "docs/**/*.md"
+
+  docs:links:check:
+    desc: Check Markdown links for the knowledge base
+    cmds:
+      - npx --yes markdown-link-check -q "AGENTS.md" "Readme.md" "docs"
+
+  docs:lint:
+    desc: Run documentation lint checks
+    deps:
+      - docs:lint:rules
+      - docs:links:check
+
+  docs:lint:fix:
+    desc: Auto-fix documentation lint issues where possible
+    deps:
+      - docs:lint:rules:fix
+
+  docs:fmt:check:
+    desc: Run Markdown formatting checks
+    cmds:
+      - npx --yes prettier --check "AGENTS.md" "Readme.md" "docs/**/*.md"
+
+  docs:fmt:fix:
+    desc: Format Markdown documents with Prettier
+    cmds:
+      - npx --yes prettier --write "AGENTS.md" "Readme.md" "docs/**/*.md"
 
   dev:
     desc: Run backend and frontend dev servers in parallel
@@ -98,17 +146,26 @@ tasks:
     cmds:
       - rm -rf backend/bin frontend/dist
 
-  fmt:
+  fmt:check:
     desc: Run global formatting checks
     deps:
-      - backend:fmt
-      - frontend:fmt
+      - backend:fmt:check
+      - frontend:fmt:check
+      - docs:fmt:check
+
+  fmt:fix:
+    desc: Run global formatting fixes
+    deps:
+      - backend:fmt:fix
+      - frontend:fmt:fix
+      - docs:fmt:fix
 
   lint:
     desc: Run global lint checks
     deps:
       - backend:lint
       - frontend:lint
+      - docs:lint
 
   vet:
     desc: Run global vet checks

@@ -30,7 +30,7 @@ jobs:
         run: task frontend:install
 
       - name: Run formatting checks
-        run: task fmt
+        run: task fmt:check
 
       - name: Run lint checks
         run: task lint
