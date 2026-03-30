@@ -13,6 +13,7 @@ onMounted(() => {
   void initializeList();
 });
 
+// 页面启动时统一触发列表拉取，并输出首屏可读状态。
 async function initializeList(): Promise<void> {
   store.print(t("status.waiting"));
   const success = await store.fetchInstances();
@@ -25,6 +26,7 @@ async function initializeList(): Promise<void> {
   }
 }
 
+// 视图层仅做输入校验和 action 触发，副作用与错误收敛在 store 内完成。
 async function handleCreate(): Promise<void> {
   const trimmed = newContainerName.value.trim();
   if (!trimmed) {
@@ -40,12 +42,14 @@ async function handleCreate(): Promise<void> {
   }
 }
 
+// 删除属于破坏性操作，执行前必须二次确认。
 async function handleDelete(containerId: string): Promise<void> {
   if (!confirm(t("containers.confirmDelete"))) return;
   store.print(t("status.deleting"));
   await store.remove(containerId);
 }
 
+// 根据当前运行态切换 start/stop，并输出阶段性反馈以避免静默操作。
 async function handleToggle(instance: {
   container_id: string;
   name: string;

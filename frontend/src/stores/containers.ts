@@ -11,8 +11,10 @@ import {
 
 export const useContainerStore = defineStore("containers", () => {
   const instances = ref<Instance[]>([]);
+  // 统一的输出区文本，视图层只负责渲染该结果。
   const output = ref<string>("");
 
+  // 将异常对象收敛为可展示文本，避免视图层分散处理错误结构。
   function getErrorMessage(error: unknown): string {
     if (error instanceof Error) return error.message;
     if (typeof error === "string") return error;
@@ -38,6 +40,7 @@ export const useContainerStore = defineStore("containers", () => {
     output.value = `ERROR: ${getErrorMessage(error)}`;
   }
 
+  // 同步后端实例列表到全局状态，返回值供视图层决定后续提示文案。
   async function fetchInstances(): Promise<boolean> {
     try {
       const data = await listInstances();
@@ -49,6 +52,7 @@ export const useContainerStore = defineStore("containers", () => {
     }
   }
 
+  // 创建实例后立即刷新列表，避免视图层维护后端数据副本。
   async function create(name: string): Promise<boolean> {
     try {
       const data = await apiCreate(name);
@@ -61,6 +65,7 @@ export const useContainerStore = defineStore("containers", () => {
     }
   }
 
+  // 删除结果与刷新都在 store 内完成，破坏性确认由视图层负责。
   async function remove(containerId: string): Promise<void> {
     try {
       const data = await apiDelete(containerId);
@@ -71,6 +76,7 @@ export const useContainerStore = defineStore("containers", () => {
     }
   }
 
+  // start/stop 统一走一个 action，并在 finally 刷新以消除状态漂移。
   async function toggle(instance: Instance): Promise<boolean> {
     const running = isRunning(instance.status);
     let success = true;

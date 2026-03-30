@@ -12,7 +12,19 @@ function isPlainObject(value: unknown): value is JsonObject {
   return Object.prototype.toString.call(value) === "[object Object]";
 }
 
+function getResponseErrorMessage(data: unknown, status: number): string {
+  // 后端契约约定优先返回 error 字段，前端统一在这里做错误信息提取。
+  if (data && typeof data === "object" && "error" in data) {
+    const error = (data as { error?: unknown }).error;
+    if (typeof error === "string" && error.trim().length > 0) {
+      return error;
+    }
+  }
+  return `request failed: ${status}`;
+}
+
 async function request<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+  // 统一处理请求体序列化、默认请求头和非 2xx 错误转换。
   const { headers: customHeaders, body, ...rest } = options;
   const headers = new Headers(customHeaders);
 
@@ -38,10 +50,9 @@ async function request<T = unknown>(path: string, options: RequestOptions = {}):
     body: finalBody,
   });
 
-  const data = await resp.json().catch(() => ({}));
+  const data: unknown = await resp.json().catch(() => ({}));
   if (!resp.ok) {
-    const message = data?.error || `request failed: ${resp.status}`;
-    throw new Error(message);
+    throw new Error(getResponseErrorMessage(data, resp.status));
   }
   return data as T;
 }
