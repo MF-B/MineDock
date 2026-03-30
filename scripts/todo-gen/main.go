@@ -40,7 +40,7 @@ func main() {
 		fatalf("collect TODO comments: %v", err)
 	}
 
-	if err := writeMarkdown(root, outPath, items); err != nil {
+	if err := writeMarkdown(outPath, items); err != nil {
 		fatalf("write output file: %v", err)
 	}
 
@@ -171,7 +171,7 @@ func isLikelyCommentLine(line string, todoIndex int) bool {
 	return strings.HasPrefix(trimmed, "*")
 }
 
-func writeMarkdown(root, outPath string, items []todoItem) error {
+func writeMarkdown(outPath string, items []todoItem) error {
 	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 		return err
 	}
@@ -182,17 +182,14 @@ func writeMarkdown(root, outPath string, items []todoItem) error {
 	}
 	defer f.Close()
 
-	now := time.Now().Format(time.RFC3339)
+	generatedDate := time.Now().UTC().Format("2006-01-02")
 	if _, err := fmt.Fprintln(f, "# TODO Index"); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(f, "\nGenerated at: %s\n", now); err != nil {
+	if _, err := fmt.Fprintf(f, "\nGenerated date: %s\n", generatedDate); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintln(f, "Source pattern: TODO: description"); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(f, "Repository root: %s\n", filepath.ToSlash(root)); err != nil {
 		return err
 	}
 

@@ -13,7 +13,7 @@
 ### 格式化
 
 - 使用 ESLint + Prettier。
-- 使用 TypeScript严格模式。
+- 使用 TypeScript 严格模式。
 
 ### 注释规范
 

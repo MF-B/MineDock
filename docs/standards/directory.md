@@ -2,7 +2,7 @@
 
 ```text
 MineDock/
-├── .github/                # 存放ci/cd
+├── .github/                # 存放 CI/CD
 ├── backend/                # 后端 Go 服务
 │   ├── data/               # 数据存储目录
 │   ├── internal/           # 内部私有代码

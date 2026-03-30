@@ -37,7 +37,7 @@ tasks:
     desc: Run backend golangci-lint checks
     dir: backend
     cmds:
-      - go run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run --config .golangci.yml ./...
+      - go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 run --config .golangci.yml ./...
 
   backend:test:
     desc: Run backend tests
@@ -91,7 +91,7 @@ tasks:
   docs:todo:
     desc: Generate docs/exec-plans/TODO.md from TODO comments
     cmds:
-      - go run ./scripts/todo-gen/main.go -root .. -out ../docs/exec-plans/TODO.md
+      - go run ./scripts/todo-gen/main.go -root . -out ./docs/exec-plans/TODO.md
 
   docs:lint:rules:
     desc: Run Markdown rule checks for the knowledge base
