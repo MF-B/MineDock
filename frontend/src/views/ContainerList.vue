@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { computed, ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { useContainerStore } from "../stores/containers";
 
@@ -8,6 +8,13 @@ const store = useContainerStore();
 
 const showCreateModal = ref(false);
 const newContainerName = ref("");
+
+const outputText = computed(() => {
+  if (store.outputI18n) {
+    return t(store.outputI18n.key, store.outputI18n.values ?? {});
+  }
+  return store.output;
+});
 
 onMounted(() => {
   void initializeList();
@@ -30,7 +37,7 @@ async function initializeList(): Promise<void> {
 async function handleCreate(): Promise<void> {
   const trimmed = newContainerName.value.trim();
   if (!trimmed) {
-    store.printError(new Error(t("status.emptyName")));
+    store.printErrorKey("status.emptyName");
     return;
   }
 
@@ -131,7 +138,7 @@ async function handleToggle(instance: {
     </div>
 
     <!-- 用于显示接口返回的简易日志 -->
-    <pre class="output">{{ store.output }}</pre>
+    <pre class="output">{{ outputText }}</pre>
   </main>
 </template>
 

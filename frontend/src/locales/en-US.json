@@ -25,6 +25,19 @@
     "starting": "Starting container: {name}...",
     "startSuccess": "Container {name} start request sent"
   },
+  "errors": {
+    "network": "Network request failed. Please check your connection and try again.",
+    "badRequest": "The request is invalid. Please verify your input and retry.",
+    "notFound": "The requested resource was not found.",
+    "conflict": "The operation conflicts with the current resource state. Please refresh and retry.",
+    "internal": "The service is temporarily unavailable. Please try again later.",
+    "requestFailedWithStatus": "Request failed (status: {status}).",
+    "invalidJsonBody": "The request body format is invalid.",
+    "invalidContainerId": "The container ID is invalid.",
+    "instanceNameExists": "Container name already exists. Please choose another one.",
+    "instanceRunning": "The container is running. Stop it before deleting.",
+    "unknown": "An unknown error occurred. Please try again later."
+  },
   "sidebar": {
     "containerList": "Containers"
   },

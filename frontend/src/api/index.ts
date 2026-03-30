@@ -8,19 +8,39 @@ interface RequestOptions extends Omit<RequestInit, "headers" | "body"> {
   body?: BodyInit | JsonObject | null;
 }
 
+export interface ApiRequestErrorInfo {
+  key: string;
+  status?: number;
+  backendMessage?: string;
+}
+
+export class ApiRequestError extends Error {
+  readonly key: string;
+  readonly status?: number;
+  readonly backendMessage?: string;
+
+  constructor(info: ApiRequestErrorInfo) {
+    super(info.key);
+    this.name = "ApiRequestError";
+    this.key = info.key;
+    this.status = info.status;
+    this.backendMessage = info.backendMessage;
+  }
+}
+
 function isPlainObject(value: unknown): value is JsonObject {
   return Object.prototype.toString.call(value) === "[object Object]";
 }
 
-function getResponseErrorMessage(data: unknown, status: number): string {
-  // 后端契约约定优先返回 error 字段，前端统一在这里做错误信息提取。
+function getResponseBackendError(data: unknown): string | undefined {
+  // 后端契约约定优先返回 error 字段，前端统一在这里提取后再映射到 i18n key。
   if (data && typeof data === "object" && "error" in data) {
     const error = (data as { error?: unknown }).error;
     if (typeof error === "string" && error.trim().length > 0) {
-      return error;
+      return error.trim();
     }
   }
-  return `request failed: ${status}`;
+  return undefined;
 }
 
 async function request<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -44,15 +64,24 @@ async function request<T = unknown>(path: string, options: RequestOptions = {}):
     headers.set("Accept", "application/json");
   }
 
-  const resp = await fetch(`${BASE_URL}${path}`, {
-    ...rest,
-    headers,
-    body: finalBody,
-  });
+  let resp: Response;
+  try {
+    resp = await fetch(`${BASE_URL}${path}`, {
+      ...rest,
+      headers,
+      body: finalBody,
+    });
+  } catch {
+    throw new ApiRequestError({ key: "errors.network" });
+  }
 
   const data: unknown = await resp.json().catch(() => ({}));
   if (!resp.ok) {
-    throw new Error(getResponseErrorMessage(data, resp.status));
+    throw new ApiRequestError({
+      key: "errors.httpStatus",
+      status: resp.status,
+      backendMessage: getResponseBackendError(data),
+    });
   }
   return data as T;
 }
