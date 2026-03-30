@@ -1,5 +1,6 @@
-## 目录规范
-```
+# 目录规范
+
+```text
 MineDock/
 ├── .github/                # 存放ci/cd
 ├── backend/                # 后端 Go 服务

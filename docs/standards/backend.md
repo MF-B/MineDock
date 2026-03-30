@@ -3,6 +3,7 @@
 ## 1. 基础规范
 
 ### 技术栈
+
 - 开发语言：Go
 - 持久化存储：SQLite
 - 核心依赖：Docker SDK
@@ -12,7 +13,7 @@
 ### 格式化
 
 - 所有 Go 文件必须通过 `gofmt`。
-- 本地执行：`task backend:fmt`，仓库级执行：`task fmt`。
+- 本地执行：`task backend:fmt:check`，仓库级执行：`task fmt:check`。
 
 ### 注释(Go Doc)
 
@@ -22,13 +23,14 @@
 ## 2. 核心机制与控制流
 
 ### 上下文与并发
+
 - Context 传递：
   - `ctx` 必须作为函数第一个参数。
   - Handler 层通过 `r.Context()` 获取生命周期。
   - 禁止将 `context.Context` 存储在结构体中。
 - Goroutine 管理：
-    - 启动 Goroutine 时必须明确其**退出机制**（通过 ctx 或 channel）。
-    - 禁止在 `init()` 函数中启动后台任务。
+  - 启动 Goroutine 时必须明确其**退出机制**（通过 ctx 或 channel）。
+  - 禁止在 `init()` 函数中启动后台任务。
 
 ### 错误处理
 
@@ -73,4 +75,4 @@
 - 后端测试入口：`task backend:test`（`go test ./...`）。
 - Lint 检查：`task backend:lint`（`golangci-lint run ./...`）。
 - 静态检查：`task backend:vet`（`go vet ./...`）。
-- 提交前最低门禁建议：`task fmt && task lint && task vet && task test && task build`。
+- 提交前最低门禁建议：`task fmt:check && task lint && task vet && task test && task build`。

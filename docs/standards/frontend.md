@@ -3,6 +3,7 @@
 ## 1. 基础与类型安全
 
 ### 技术栈
+
 - 构建工具：Vite
 - 核心框架：Vue 3 (Composition API)
 - 开发语言: TypeScript
@@ -31,15 +32,16 @@
 ## 4. 数据交互与网络
 
 ### API
+
 [../api/contracts.md](../api/contracts.md)
 
 网络约定：
 
 - 基础地址读取 `VITE_API_BASE_URL`，默认回退 `/api`。
 - 通用请求函数负责：
-	- JSON 序列化与 `Content-Type` 注入
-	- 默认 `Accept: application/json`
-	- 非 2xx 响应统一抛错（优先读取后端 `error` 字段）
+  - JSON 序列化与 `Content-Type` 注入
+  - 默认 `Accept: application/json`
+  - 非 2xx 响应统一抛错（优先读取后端 `error` 字段）
 - 所有业务 API 通过统一封装函数导出。
 
 ## 5. 样式与 UI 框架
@@ -48,16 +50,17 @@
 - 变量分层：
   - 基础变量：如 `--blue-500`, `--gray-900`
   - 语义变量：如 `--bg-primary`, `--text-danger`, `--border-color`
-- 主题切换实现：通过动态修改 `<html>` 或 `<body>` 的 `data-theme` 属性（如 `data-theme="dark"`），结合 CSS 变量覆盖实现低成本主题切换
+- 主题切换实现：通过动态修改 `<html>` 或 `<body>` 的 `data-theme` 属性
+  （如 `data-theme="dark"`），结合 CSS 变量覆盖实现低成本主题切换
 
 ## 6. 路由与鉴权
 
 - 当前仅包含基础路由 `/`，映射容器列表页。
 - 当前版本无登录鉴权。
 - 新增页面时要求：
-	- 在 `router/index.ts` 显式注册路由
-	- 路由名称与页面职责一致
-	- 若后续引入鉴权，统一通过全局前置守卫实现
+  - 在 `router/index.ts` 显式注册路由
+  - 路由名称与页面职责一致
+  - 若后续引入鉴权，统一通过全局前置守卫实现
 
 ## 7. 异常处理
 

@@ -5,9 +5,11 @@ Source pattern: TODO: description
 Repository root: C:/Users/guzem/Desktop/Core/毕设/MineDock
 
 ## Summary
+
 - Total TODO items: 9
 
 ## Items
+
 - [ ] 抽取 start/stop/delete 的公共处理流程。 (backend/internal/api/handlers.go:87)
 - [ ] 增加统一的编码错误日志，提升可观测性。 (backend/internal/api/handlers.go:154)
 - [ ] 让 Docker 创建与 SQLite 保存具备原子性。 (backend/internal/service/docker_service.go:47)

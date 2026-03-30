@@ -3,6 +3,7 @@
 ## 数据结构
 
 ### 后端
+
 ```go
 type Instance struct {
     // 映射的 Docker 容器唯一标识
@@ -13,7 +14,9 @@ type Instance struct {
     Status      string `json:"status"`
 }
 ```
+
 ### 数据库
+
 - `instances` 表字段：
 - `container_id`（主键）
 - `name`（唯一）
@@ -21,6 +24,7 @@ type Instance struct {
 - `created_at`
 
 ## 接口
+
 [../api/contracts.md](../api/contracts.md)
 
 ## 状态流转
