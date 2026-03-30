@@ -15,7 +15,7 @@ const setLocale = (lang: typeof locale.value) => {
   isOpen.value = false;
 };
 
-// Close dropdown when clicking outside
+// 语言菜单只在组件内维护，点击外部区域时统一收起。
 const handleClickOutside = (event: MouseEvent) => {
   const target = event.target as HTMLElement;
   if (!target.closest(".lang-selector")) {
@@ -24,6 +24,7 @@ const handleClickOutside = (event: MouseEvent) => {
 };
 
 onMounted(() => {
+  // 使用 document 级监听做外部点击检测，卸载时必须成对移除。
   document.addEventListener("click", handleClickOutside);
 });
 

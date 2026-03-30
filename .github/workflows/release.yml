@@ -34,7 +34,7 @@ jobs:
         run: task frontend:install
 
       - name: Run frontend format checks
-        run: task frontend:fmt
+        run: task frontend:fmt:check
 
       - name: Run frontend lint checks
         run: task frontend:lint

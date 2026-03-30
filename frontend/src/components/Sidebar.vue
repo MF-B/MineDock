@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { RouterLink } from "vue-router";
 
+// 同一开关状态同时驱动桌面折叠和移动端抽屉，保持两端导航行为一致。
 const isOpen = ref<boolean>(false);
 </script>
 

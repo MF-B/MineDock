@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { computed, ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { useContainerStore } from "../stores/containers";
 
@@ -9,10 +9,18 @@ const store = useContainerStore();
 const showCreateModal = ref(false);
 const newContainerName = ref("");
 
+const outputText = computed(() => {
+  if (store.outputI18n) {
+    return t(store.outputI18n.key, store.outputI18n.values ?? {});
+  }
+  return store.output;
+});
+
 onMounted(() => {
   void initializeList();
 });
 
+// 页面启动时统一触发列表拉取，并输出首屏可读状态。
 async function initializeList(): Promise<void> {
   store.print(t("status.waiting"));
   const success = await store.fetchInstances();
@@ -25,10 +33,11 @@ async function initializeList(): Promise<void> {
   }
 }
 
+// 视图层仅做输入校验和 action 触发，副作用与错误收敛在 store 内完成。
 async function handleCreate(): Promise<void> {
   const trimmed = newContainerName.value.trim();
   if (!trimmed) {
-    store.printError(new Error(t("status.emptyName")));
+    store.printErrorKey("status.emptyName");
     return;
   }
 
@@ -40,12 +49,14 @@ async function handleCreate(): Promise<void> {
   }
 }
 
+// 删除属于破坏性操作，执行前必须二次确认。
 async function handleDelete(containerId: string): Promise<void> {
   if (!confirm(t("containers.confirmDelete"))) return;
   store.print(t("status.deleting"));
   await store.remove(containerId);
 }
 
+// 根据当前运行态切换 start/stop，并输出阶段性反馈以避免静默操作。
 async function handleToggle(instance: {
   container_id: string;
   name: string;
@@ -127,7 +138,7 @@ async function handleToggle(instance: {
     </div>
 
     <!-- 用于显示接口返回的简易日志 -->
-    <pre class="output">{{ store.output }}</pre>
+    <pre class="output">{{ outputText }}</pre>
   </main>
 </template>
 

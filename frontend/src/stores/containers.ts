@@ -2,6 +2,7 @@ import { ref } from "vue";
 import { defineStore } from "pinia";
 import type { Instance } from "../api/index";
 import {
+  ApiRequestError,
   listInstances,
   createInstance as apiCreate,
   deleteInstance as apiDelete,
@@ -9,35 +10,101 @@ import {
   stopInstance as apiStop,
 } from "../api/index";
 
+type OutputI18nPayload = {
+  key: string;
+  values?: Record<string, string | number>;
+};
+
+const backendMessageKeyMap: Record<string, string> = {
+  "name is required": "status.emptyName",
+  "invalid json body": "errors.invalidJsonBody",
+  "invalid container id": "errors.invalidContainerId",
+  "instance name already exists": "errors.instanceNameExists",
+  "instance is running, stop it before delete": "errors.instanceRunning",
+};
+
+function isLikelyI18nKey(value: string): boolean {
+  return /^[a-z][a-z0-9_-]*(?:\.[a-zA-Z0-9_-]+)+$/.test(value);
+}
+
 export const useContainerStore = defineStore("containers", () => {
   const instances = ref<Instance[]>([]);
+  // 统一输出区支持纯文本和 i18n key 两种模式，视图层只负责渲染。
   const output = ref<string>("");
-
-  function getErrorMessage(error: unknown): string {
-    if (error instanceof Error) return error.message;
-    if (typeof error === "string") return error;
-    if (error && typeof error === "object") {
-      const maybeMessage = (error as { message?: unknown }).message;
-      if (typeof maybeMessage === "string" && maybeMessage.trim().length > 0) {
-        return maybeMessage;
-      }
-      try {
-        return JSON.stringify(error);
-      } catch {
-        return String(error);
-      }
-    }
-    return String(error);
-  }
+  const outputI18n = ref<OutputI18nPayload | null>(null);
 
   function print(data: unknown): void {
+    outputI18n.value = null;
     output.value = typeof data === "string" ? data : JSON.stringify(data, null, 2);
   }
 
-  function printError(error: unknown): void {
-    output.value = `ERROR: ${getErrorMessage(error)}`;
+  function printI18n(key: string, values?: Record<string, string | number>): void {
+    outputI18n.value = { key, values };
+    output.value = "";
   }
 
+  function mapStatusToError(status?: number): OutputI18nPayload {
+    switch (status) {
+      case 400:
+        return { key: "errors.badRequest" };
+      case 404:
+        return { key: "errors.notFound" };
+      case 409:
+        return { key: "errors.conflict" };
+      case 500:
+        return { key: "errors.internal" };
+      default:
+        if (typeof status === "number") {
+          return { key: "errors.requestFailedWithStatus", values: { status } };
+        }
+        return { key: "errors.unknown" };
+    }
+  }
+
+  // 统一将底层异常映射为稳定的 i18n key，避免泄露网络/后端原始文案。
+  function mapErrorToI18n(error: unknown): OutputI18nPayload {
+    if (error instanceof ApiRequestError) {
+      if (error.backendMessage) {
+        const mappedKey = backendMessageKeyMap[error.backendMessage.trim().toLowerCase()];
+        if (mappedKey) {
+          return { key: mappedKey };
+        }
+      }
+
+      if (error.key === "errors.network") {
+        return { key: "errors.network" };
+      }
+
+      if (error.key === "errors.httpStatus") {
+        return mapStatusToError(error.status);
+      }
+
+      if (isLikelyI18nKey(error.key)) {
+        return { key: error.key };
+      }
+    }
+
+    if (typeof error === "string" && isLikelyI18nKey(error)) {
+      return { key: error };
+    }
+
+    if (error instanceof Error && isLikelyI18nKey(error.message)) {
+      return { key: error.message };
+    }
+
+    return { key: "errors.unknown" };
+  }
+
+  function printError(error: unknown): void {
+    const mapped = mapErrorToI18n(error);
+    printI18n(mapped.key, mapped.values);
+  }
+
+  function printErrorKey(key: string, values?: Record<string, string | number>): void {
+    printI18n(key, values);
+  }
+
+  // 同步后端实例列表到全局状态，返回值供视图层决定后续提示文案。
   async function fetchInstances(): Promise<boolean> {
     try {
       const data = await listInstances();
@@ -49,6 +116,7 @@ export const useContainerStore = defineStore("containers", () => {
     }
   }
 
+  // 创建实例后立即刷新列表，避免视图层维护后端数据副本。
   async function create(name: string): Promise<boolean> {
     try {
       const data = await apiCreate(name);
@@ -61,6 +129,7 @@ export const useContainerStore = defineStore("containers", () => {
     }
   }
 
+  // 删除结果与刷新都在 store 内完成，破坏性确认由视图层负责。
   async function remove(containerId: string): Promise<void> {
     try {
       const data = await apiDelete(containerId);
@@ -71,6 +140,7 @@ export const useContainerStore = defineStore("containers", () => {
     }
   }
 
+  // start/stop 统一走一个 action，并在 finally 刷新以消除状态漂移。
   async function toggle(instance: Instance): Promise<boolean> {
     const running = isRunning(instance.status);
     let success = true;
@@ -97,8 +167,10 @@ export const useContainerStore = defineStore("containers", () => {
   return {
     instances,
     output,
+    outputI18n,
     print,
     printError,
+    printErrorKey,
     fetchInstances,
     create,
     remove,

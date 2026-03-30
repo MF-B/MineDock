@@ -25,6 +25,19 @@
     "starting": "正在开启容器: {name}...",
     "startSuccess": "容器 {name} 请求开启成功"
   },
+  "errors": {
+    "network": "网络请求失败，请检查连接后重试。",
+    "badRequest": "请求参数无效，请检查输入后重试。",
+    "notFound": "请求的资源不存在或已被移除。",
+    "conflict": "当前操作与资源状态冲突，请刷新后重试。",
+    "internal": "服务暂时不可用，请稍后重试。",
+    "requestFailedWithStatus": "请求失败（状态码：{status}）。",
+    "invalidJsonBody": "请求体格式不正确。",
+    "invalidContainerId": "容器 ID 无效。",
+    "instanceNameExists": "容器名称已存在，请更换后重试。",
+    "instanceRunning": "容器运行中，请先停止后再删除。",
+    "unknown": "发生未知错误，请稍后重试。"
+  },
   "sidebar": {
     "containerList": "容器列表"
   },

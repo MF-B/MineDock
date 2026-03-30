@@ -8,11 +8,43 @@ interface RequestOptions extends Omit<RequestInit, "headers" | "body"> {
   body?: BodyInit | JsonObject | null;
 }
 
+export interface ApiRequestErrorInfo {
+  key: string;
+  status?: number;
+  backendMessage?: string;
+}
+
+export class ApiRequestError extends Error {
+  readonly key: string;
+  readonly status?: number;
+  readonly backendMessage?: string;
+
+  constructor(info: ApiRequestErrorInfo) {
+    super(info.key);
+    this.name = "ApiRequestError";
+    this.key = info.key;
+    this.status = info.status;
+    this.backendMessage = info.backendMessage;
+  }
+}
+
 function isPlainObject(value: unknown): value is JsonObject {
   return Object.prototype.toString.call(value) === "[object Object]";
 }
 
+function getResponseBackendError(data: unknown): string | undefined {
+  // 后端契约约定优先返回 error 字段，前端统一在这里提取后再映射到 i18n key。
+  if (data && typeof data === "object" && "error" in data) {
+    const error = (data as { error?: unknown }).error;
+    if (typeof error === "string" && error.trim().length > 0) {
+      return error.trim();
+    }
+  }
+  return undefined;
+}
+
 async function request<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+  // 统一处理请求体序列化、默认请求头和非 2xx 错误转换。
   const { headers: customHeaders, body, ...rest } = options;
   const headers = new Headers(customHeaders);
 
@@ -32,16 +64,24 @@ async function request<T = unknown>(path: string, options: RequestOptions = {}):
     headers.set("Accept", "application/json");
   }
 
-  const resp = await fetch(`${BASE_URL}${path}`, {
-    ...rest,
-    headers,
-    body: finalBody,
-  });
+  let resp: Response;
+  try {
+    resp = await fetch(`${BASE_URL}${path}`, {
+      ...rest,
+      headers,
+      body: finalBody,
+    });
+  } catch {
+    throw new ApiRequestError({ key: "errors.network" });
+  }
 
-  const data = await resp.json().catch(() => ({}));
+  const data: unknown = await resp.json().catch(() => ({}));
   if (!resp.ok) {
-    const message = data?.error || `request failed: ${resp.status}`;
-    throw new Error(message);
+    throw new ApiRequestError({
+      key: "errors.httpStatus",
+      status: resp.status,
+      backendMessage: getResponseBackendError(data),
+    });
   }
   return data as T;
 }

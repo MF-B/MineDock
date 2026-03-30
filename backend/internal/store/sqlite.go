@@ -11,16 +11,15 @@ import (
 
 	"minedock/backend/internal/model"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // 注册 SQLite 驱动
 )
 
-var ErrNameExists = errors.New("instance name already exists")
-
-// SQLiteStore persists instance state in a local SQLite database.
+// SQLiteStore 在本地 SQLite 数据库中持久化实例状态。
 type SQLiteStore struct {
 	db *sql.DB
 }
 
+// NewSQLiteStore 打开 dbPath 指向的 SQLite 并初始化所需表结构。
 func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	cleanPath := strings.TrimSpace(dbPath)
 	if cleanPath == "" {
@@ -36,7 +35,8 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("open sqlite db: %w", err)
 	}
 
-	// SQLite works best with a single writer connection in this MVP.
+	// 说明：当前 MVP 阶段使用单写连接更贴合 SQLite 的并发模型。
+	// TODO: 当写入吞吐成为瓶颈时，重新评估连接池策略。
 	db.SetMaxOpenConns(1)
 
 	if err := db.Ping(); err != nil {
@@ -53,6 +53,7 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	return s, nil
 }
 
+// Close 释放底层 SQLite 数据库连接。
 func (s *SQLiteStore) Close() error {
 	if s == nil || s.db == nil {
 		return nil
@@ -60,6 +61,7 @@ func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
 
+// InitSchema 在表不存在时创建存储表结构。
 func (s *SQLiteStore) InitSchema(ctx context.Context) error {
 	const schema = `
 CREATE TABLE IF NOT EXISTS instances (
@@ -76,6 +78,7 @@ CREATE TABLE IF NOT EXISTS instances (
 	return nil
 }
 
+// Save 按容器 ID 执行实例记录的 upsert。
 func (s *SQLiteStore) Save(ctx context.Context, instance model.Instance) error {
 	const upsert = `
 INSERT INTO instances(container_id, name, status)
@@ -89,7 +92,7 @@ DO UPDATE SET
 	_, err := s.db.ExecContext(ctx, upsert, instance.ContainerID, instance.Name, instance.Status)
 	if err != nil {
 		if isUniqueNameErr(err) {
-			return ErrNameExists
+			return model.ErrNameExists
 		}
 		return fmt.Errorf("save instance: %w", err)
 	}
@@ -97,6 +100,7 @@ DO UPDATE SET
 	return nil
 }
 
+// Delete 按容器 ID 删除一条实例记录。
 func (s *SQLiteStore) Delete(ctx context.Context, containerID string) error {
 	if _, err := s.db.ExecContext(ctx, "DELETE FROM instances WHERE container_id = ?", containerID); err != nil {
 		return fmt.Errorf("delete instance: %w", err)
@@ -104,6 +108,7 @@ func (s *SQLiteStore) Delete(ctx context.Context, containerID string) error {
 	return nil
 }
 
+// Get 按容器 ID 获取一条实例记录。
 func (s *SQLiteStore) Get(ctx context.Context, containerID string) (model.Instance, bool, error) {
 	const q = `
 SELECT container_id, name, status
@@ -122,6 +127,7 @@ WHERE container_id = ?;
 	return inst, true, nil
 }
 
+// List 返回所有实例记录，并按创建时间倒序排列。
 func (s *SQLiteStore) List(ctx context.Context) ([]model.Instance, error) {
 	const q = `
 SELECT container_id, name, status
@@ -151,6 +157,9 @@ ORDER BY created_at DESC;
 	return out, nil
 }
 
+// isUniqueNameErr 判断是否为 instances.name 的唯一约束冲突。
+// 说明：当前实现依赖 SQLite 错误文本匹配。
+// TODO: 用 SQLite 错误码替代文本匹配判断。
 func isUniqueNameErr(err error) bool {
 	if err == nil {
 		return false

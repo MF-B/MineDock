@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -13,10 +12,7 @@ import (
 	"github.com/docker/docker/client"
 
 	"minedock/backend/internal/model"
-	"minedock/backend/internal/store"
 )
-
-var ErrInstanceRunning = errors.New("instance is running, stop it before delete")
 
 const (
 	managedLabelKey   = "minedock.managed"
@@ -25,20 +21,30 @@ const (
 	defaultImage      = "alpine:latest"
 )
 
-// DockerService contains business logic for container management.
+// InstanceStore 定义 DockerService 依赖的持久化操作。
+type InstanceStore interface {
+	Save(ctx context.Context, inst model.Instance) error
+	Get(ctx context.Context, containerID string) (model.Instance, bool, error)
+	Delete(ctx context.Context, containerID string) error
+}
+
+// DockerService 封装容器管理相关业务逻辑。
 type DockerService struct {
 	cli   *client.Client
-	store *store.SQLiteStore
+	store InstanceStore
 	image string
 }
 
-func NewDockerService(cli *client.Client, sqliteStore *store.SQLiteStore, imageName string) *DockerService {
+// NewDockerService 使用依赖项和运行镜像创建 DockerService。
+func NewDockerService(cli *client.Client, s InstanceStore, imageName string) *DockerService {
 	if strings.TrimSpace(imageName) == "" {
 		imageName = defaultImage
 	}
-	return &DockerService{cli: cli, store: sqliteStore, image: imageName}
+	return &DockerService{cli: cli, store: s, image: imageName}
 }
 
+// CreateInstance 创建托管容器并持久化实例元数据。
+// TODO: 让 Docker 创建与 SQLite 保存具备原子性。
 func (s *DockerService) CreateInstance(ctx context.Context, name string) (string, error) {
 	if err := s.ensureImage(ctx, s.image); err != nil {
 		return "", err
@@ -58,13 +64,15 @@ func (s *DockerService) CreateInstance(ctx context.Context, name string) (string
 
 	inst := model.Instance{ContainerID: resp.ID, Name: name, Status: "Stopped"}
 	if err := s.store.Save(ctx, inst); err != nil {
+		// 说明：请求上下文取消时，清理逻辑会使用独立上下文做尽力回收。
 		_ = s.cli.ContainerRemove(context.Background(), resp.ID, container.RemoveOptions{Force: true})
-		return "", err
+		return "", fmt.Errorf("save instance record: %w", err)
 	}
 
 	return resp.ID, nil
 }
 
+// StartInstance 启动托管容器并更新持久化状态。
 func (s *DockerService) StartInstance(ctx context.Context, containerID string) error {
 	if err := s.cli.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
 		return fmt.Errorf("start container: %w", err)
@@ -75,12 +83,13 @@ func (s *DockerService) StartInstance(ctx context.Context, containerID string) e
 		return err
 	}
 	if err := s.store.Save(ctx, inst); err != nil {
-		return err
+		return fmt.Errorf("save instance state: %w", err)
 	}
 
 	return nil
 }
 
+// StopInstance 停止托管容器并更新持久化状态。
 func (s *DockerService) StopInstance(ctx context.Context, containerID string) error {
 	timeout := 10
 	if err := s.cli.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout}); err != nil {
@@ -92,12 +101,15 @@ func (s *DockerService) StopInstance(ctx context.Context, containerID string) er
 		return err
 	}
 	if err := s.store.Save(ctx, inst); err != nil {
-		return err
+		return fmt.Errorf("save instance state: %w", err)
 	}
 
 	return nil
 }
 
+// ListInstances 列出托管容器并将快照状态同步到存储层。
+// TODO: 将逐条 Save 改为批量或事务化同步路径。
+// TODO: 增加并发写保护，避免最后写入覆盖前写入。
 func (s *DockerService) ListInstances(ctx context.Context) ([]model.Instance, error) {
 	args := filters.NewArgs()
 	args.Add("label", managedLabelKey+"="+managedLabelValue)
@@ -109,6 +121,7 @@ func (s *DockerService) ListInstances(ctx context.Context) ([]model.Instance, er
 
 	instances := make([]model.Instance, 0, len(containers))
 	for _, c := range containers {
+		// 说明：名称回退顺序是先 label，再 Docker 容器名。
 		name := c.Labels[nameLabelKey]
 		if strings.TrimSpace(name) == "" && len(c.Names) > 0 {
 			name = strings.TrimPrefix(c.Names[0], "/")
@@ -122,6 +135,8 @@ func (s *DockerService) ListInstances(ctx context.Context) ([]model.Instance, er
 			Name:        name,
 			Status:      status,
 		}
+		// 说明：当前 Save 为尽力而为，避免影响列表返回。
+		// TODO: 在不影响列表返回的前提下上报同步失败。
 		_ = s.store.Save(ctx, inst)
 		instances = append(instances, inst)
 	}
@@ -129,6 +144,7 @@ func (s *DockerService) ListInstances(ctx context.Context) ([]model.Instance, er
 	return instances, nil
 }
 
+// DeleteInstance 删除已停止的托管容器及其持久化记录。
 func (s *DockerService) DeleteInstance(ctx context.Context, containerID string) error {
 	inspect, err := s.cli.ContainerInspect(ctx, containerID)
 	if err != nil {
@@ -136,24 +152,27 @@ func (s *DockerService) DeleteInstance(ctx context.Context, containerID string) 
 	}
 
 	if inspect.State != nil && inspect.State.Running {
-		return ErrInstanceRunning
+		return model.ErrInstanceRunning
 	}
 
 	if err := s.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: false}); err != nil {
 		return fmt.Errorf("remove container: %w", err)
 	}
 	if err := s.store.Delete(ctx, containerID); err != nil {
-		return err
+		return fmt.Errorf("delete instance record: %w", err)
 	}
 	return nil
 }
 
+// readInstance 从存储层读取实例信息并与运行态进行对账。
+// TODO: 将该函数拆分为存储读取与 Docker 对账两个辅助函数。
 func (s *DockerService) readInstance(ctx context.Context, containerID string, fallbackStatus string) (model.Instance, error) {
 	inst, ok, err := s.store.Get(ctx, containerID)
 	if err != nil {
-		return model.Instance{}, err
+		return model.Instance{}, fmt.Errorf("read instance: %w", err)
 	}
 	if ok {
+		// 说明：命中存储后仍会应用调用方传入的兜底状态。
 		inst.Status = fallbackStatus
 		return inst, nil
 	}
@@ -173,6 +192,7 @@ func (s *DockerService) readInstance(ctx context.Context, containerID string, fa
 
 	status := fallbackStatus
 	if inspect.State != nil {
+		// 说明：当 inspect 有运行态数据时，以 Docker 真实状态覆盖兜底状态。
 		if inspect.State.Running {
 			status = "Running"
 		} else {
@@ -183,6 +203,7 @@ func (s *DockerService) readInstance(ctx context.Context, containerID string, fa
 	return model.Instance{ContainerID: containerID, Name: name, Status: status}, nil
 }
 
+// ensureImage 确保本地存在目标镜像，缺失时自动拉取。
 func (s *DockerService) ensureImage(ctx context.Context, imageName string) error {
 	list, err := s.cli.ImageList(ctx, image.ListOptions{})
 	if err != nil {
