@@ -10,6 +10,8 @@ type Instance struct {
     ContainerID string `json:"container_id"`
     // 服务端名称
     Name        string `json:"name"`
+    // 来源镜像的注册表 ID
+    ImageID     string `json:"image_id"`
     // 当前运行态
     Status      string `json:"status"`
 }

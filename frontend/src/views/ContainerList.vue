@@ -2,12 +2,15 @@
 import { computed, ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { useContainerStore } from "../stores/containers";
+import { useRegistryStore } from "../stores/registry";
 
 const { t } = useI18n();
 const store = useContainerStore();
+const registryStore = useRegistryStore();
 
 const showCreateModal = ref(false);
 const newContainerName = ref("");
+const selectedImageId = ref("");
 
 const outputText = computed(() => {
   if (store.outputI18n) {
@@ -16,13 +19,36 @@ const outputText = computed(() => {
   return store.output;
 });
 
+const selectedImageDescription = computed(() => {
+  return registryStore.getById(selectedImageId.value)?.description ?? "";
+});
+
 onMounted(() => {
   void initializeList();
 });
 
+function ensureDefaultImageSelection(): void {
+  if (!selectedImageId.value && registryStore.images.length > 0) {
+    selectedImageId.value = registryStore.images[0].id;
+  }
+}
+
+function openCreateModal(): void {
+  showCreateModal.value = true;
+  ensureDefaultImageSelection();
+}
+
 // 页面启动时统一触发列表拉取，并输出首屏可读状态。
 async function initializeList(): Promise<void> {
   store.print(t("status.waiting"));
+
+  try {
+    await registryStore.fetchImages();
+    ensureDefaultImageSelection();
+  } catch (err) {
+    store.printError(err);
+  }
+
   const success = await store.fetchInstances();
   if (!success) return;
 
@@ -41,8 +67,14 @@ async function handleCreate(): Promise<void> {
     return;
   }
 
+  const imageId = selectedImageId.value.trim();
+  if (!imageId) {
+    store.printErrorKey("status.emptyImage");
+    return;
+  }
+
   store.print(t("status.creating"));
-  const success = await store.create(trimmed);
+  const success = await store.create(trimmed, imageId);
   if (success) {
     showCreateModal.value = false;
     newContainerName.value = "";
@@ -87,7 +119,7 @@ async function handleToggle(instance: {
   <main class="main-content">
     <!-- 列表操作栏 -->
     <div class="content-actions">
-      <button class="create-btn" @click="showCreateModal = true">
+      <button class="create-btn" @click="openCreateModal">
         {{ $t("containers.createBtn") }}
       </button>
     </div>
@@ -128,11 +160,35 @@ async function handleToggle(instance: {
           :placeholder="$t('createModal.placeholder')"
           @keyup.enter="handleCreate"
         />
+        <label class="field-label" for="image-select">{{ $t("createModal.imageLabel") }}</label>
+        <select
+          id="image-select"
+          v-model="selectedImageId"
+          :disabled="registryStore.loading || registryStore.images.length === 0"
+        >
+          <option value="" disabled>{{ $t("createModal.imagePlaceholder") }}</option>
+          <option v-for="image in registryStore.images" :key="image.id" :value="image.id">
+            {{ image.name }}
+          </option>
+        </select>
+        <p v-if="registryStore.loading" class="modal-hint">{{ $t("createModal.loadingImages") }}</p>
+        <p v-else-if="registryStore.images.length === 0" class="modal-hint">
+          {{ $t("createModal.noImages") }}
+        </p>
+        <p v-else-if="selectedImageDescription" class="modal-hint">
+          {{ selectedImageDescription }}
+        </p>
         <div class="modal-actions">
           <button class="btn-cancel" @click="showCreateModal = false">
             {{ $t("createModal.cancel") }}
           </button>
-          <button class="btn-confirm" @click="handleCreate">{{ $t("createModal.confirm") }}</button>
+          <button
+            class="btn-confirm"
+            :disabled="registryStore.loading || registryStore.images.length === 0"
+            @click="handleCreate"
+          >
+            {{ $t("createModal.confirm") }}
+          </button>
         </div>
       </div>
     </div>
@@ -364,7 +420,8 @@ input:checked + .slider:before {
   font-size: 16px;
 }
 
-.modal-content input {
+.modal-content input,
+.modal-content select {
   padding: 8px 10px;
   background: var(--input-bg);
   border: 1px solid var(--input-border);
@@ -373,8 +430,20 @@ input:checked + .slider:before {
   outline: none;
 }
 
-.modal-content input:focus {
+.modal-content input:focus,
+.modal-content select:focus {
   border-color: var(--create-brass-primary);
+}
+
+.field-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.modal-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .modal-actions {
@@ -408,6 +477,11 @@ input:checked + .slider:before {
 }
 .btn-confirm:hover {
   filter: brightness(1.1);
+}
+
+.btn-confirm:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* ========== 底部输出 ========== */

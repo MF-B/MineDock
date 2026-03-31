@@ -17,6 +17,8 @@ type OutputI18nPayload = {
 
 const backendMessageKeyMap: Record<string, string> = {
   "name is required": "status.emptyName",
+  "image_id is required": "errors.imageIdRequired",
+  "image not found in registry": "errors.imageNotFound",
   "invalid json body": "errors.invalidJsonBody",
   "invalid container id": "errors.invalidContainerId",
   "instance name already exists": "errors.instanceNameExists",
@@ -117,9 +119,9 @@ export const useContainerStore = defineStore("containers", () => {
   }
 
   // 创建实例后立即刷新列表，避免视图层维护后端数据副本。
-  async function create(name: string): Promise<boolean> {
+  async function create(name: string, imageId: string): Promise<boolean> {
     try {
-      const data = await apiCreate(name);
+      const data = await apiCreate(name, imageId);
       print(data);
       await fetchInstances();
       return true;

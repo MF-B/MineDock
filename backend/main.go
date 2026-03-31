@@ -30,10 +30,20 @@ func main() {
 	}
 	defer sqliteStore.Close()
 
-	imageName := os.Getenv("MINEDOCK_IMAGE")
-	svc := service.NewDockerService(cli, sqliteStore, imageName)
+	registryPath := os.Getenv("MINEDOCK_REGISTRY_PATH")
+	if registryPath == "" {
+		registryPath = "registry.json"
+	}
+
+	registrySvc, err := service.NewRegistryService(registryPath)
+	if err != nil {
+		log.Fatalf("init registry service: %v", err)
+	}
+
+	svc := service.NewDockerService(cli, sqliteStore, registrySvc)
 	h := api.NewHandler(svc)
-	router := api.NewRouter(h)
+	registryHandler := api.NewRegistryHandler(registrySvc)
+	router := api.NewRouter(h, registryHandler)
 
 	addr := ":8080"
 	log.Printf("MineDock backend listening on %s", addr)

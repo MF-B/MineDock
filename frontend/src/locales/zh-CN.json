@@ -10,6 +10,10 @@
   "createModal": {
     "title": "新建容器",
     "placeholder": "请输入新容器名称...",
+    "imageLabel": "选择镜像",
+    "imagePlaceholder": "请选择一个镜像",
+    "loadingImages": "镜像列表加载中...",
+    "noImages": "暂无可用镜像，请稍后重试。",
     "cancel": "取消",
     "confirm": "确定"
   },
@@ -18,6 +22,7 @@
     "listRefreshed": "已刷新容器列表。",
     "noContainers": "当前暂无容器。",
     "emptyName": "容器名称不能为空",
+    "emptyImage": "请选择一个容器镜像",
     "creating": "正在创建容器...",
     "deleting": "正在删除容器...",
     "stopping": "正在关闭容器: {name}...",
@@ -33,6 +38,8 @@
     "internal": "服务暂时不可用，请稍后重试。",
     "requestFailedWithStatus": "请求失败（状态码：{status}）。",
     "invalidJsonBody": "请求体格式不正确。",
+    "imageIdRequired": "必须选择镜像后才能创建容器。",
+    "imageNotFound": "所选镜像不存在或已下线，请刷新后重试。",
     "invalidContainerId": "容器 ID 无效。",
     "instanceNameExists": "容器名称已存在，请更换后重试。",
     "instanceRunning": "容器运行中，请先停止后再删除。",

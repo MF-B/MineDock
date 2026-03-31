@@ -1,0 +1,43 @@
+[
+  {
+    "id": "minecraft-java",
+    "name": "Minecraft Java Edition",
+    "image": "itzg/minecraft-server:latest",
+    "description": "最流行的 Minecraft Java 版服务器，支持原版/Forge/Fabric/Paper 等多种模组加载器。",
+    "category": "minecraft",
+    "icon": "minecraft-java",
+    "default_env": {
+      "EULA": "TRUE",
+      "TYPE": "PAPER"
+    },
+    "default_ports": [
+      "25565:25565"
+    ]
+  },
+  {
+    "id": "minecraft-bedrock",
+    "name": "Minecraft Bedrock Edition",
+    "image": "itzg/minecraft-bedrock-server:latest",
+    "description": "Minecraft 基岩版服务器，支持手机/主机/Win10 跨平台联机。",
+    "category": "minecraft",
+    "icon": "minecraft-bedrock",
+    "default_env": {
+      "EULA": "TRUE"
+    },
+    "default_ports": [
+      "19132:19132/udp"
+    ]
+  },
+  {
+    "id": "terraria",
+    "name": "Terraria",
+    "image": "ryshe/terraria:latest",
+    "description": "Terraria 专用服务器，支持 tShock 管理。",
+    "category": "sandbox",
+    "icon": "terraria",
+    "default_env": {},
+    "default_ports": [
+      "7777:7777"
+    ]
+  }
+]

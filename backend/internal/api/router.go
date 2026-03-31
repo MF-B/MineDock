@@ -3,7 +3,7 @@ package api
 import "net/http"
 
 // NewRouter 注册 API 路由并包装中间件。
-func NewRouter(h *Handler) http.Handler {
+func NewRouter(h *Handler, registry *RegistryHandler) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/instances", h.GetInstances)
@@ -11,6 +11,9 @@ func NewRouter(h *Handler) http.Handler {
 	mux.HandleFunc("POST /api/instances/{id}/start", h.StartInstance)
 	mux.HandleFunc("POST /api/instances/{id}/stop", h.StopInstance)
 	mux.HandleFunc("DELETE /api/instances/{id}", h.DeleteInstance)
+	if registry != nil {
+		mux.HandleFunc("GET /api/registry/images", registry.GetImages)
+	}
 
 	return withCORS(mux)
 }
