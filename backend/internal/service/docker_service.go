@@ -18,7 +18,6 @@ const (
 	managedLabelKey   = "minedock.managed"
 	managedLabelValue = "true"
 	nameLabelKey      = "minedock.name"
-	defaultImage      = "alpine:latest"
 )
 
 // InstanceStore 定义 DockerService 依赖的持久化操作。
@@ -28,30 +27,41 @@ type InstanceStore interface {
 	Delete(ctx context.Context, containerID string) error
 }
 
-// DockerService 封装容器管理相关业务逻辑。
-type DockerService struct {
-	cli   *client.Client
-	store InstanceStore
-	image string
+// ImageRegistry 定义 DockerService 依赖的镜像注册表查询能力。
+type ImageRegistry interface {
+	GetImage(ctx context.Context, id string) (model.RegistryImage, error)
 }
 
-// NewDockerService 使用依赖项和运行镜像创建 DockerService。
-func NewDockerService(cli *client.Client, s InstanceStore, imageName string) *DockerService {
-	if strings.TrimSpace(imageName) == "" {
-		imageName = defaultImage
-	}
-	return &DockerService{cli: cli, store: s, image: imageName}
+// DockerService 封装容器管理相关业务逻辑。
+type DockerService struct {
+	cli      *client.Client
+	store    InstanceStore
+	registry ImageRegistry
+}
+
+// NewDockerService 使用依赖项创建 DockerService。
+func NewDockerService(cli *client.Client, s InstanceStore, registry ImageRegistry) *DockerService {
+	return &DockerService{cli: cli, store: s, registry: registry}
 }
 
 // CreateInstance 创建托管容器并持久化实例元数据。
 // TODO: 让 Docker 创建与 SQLite 保存具备原子性。
-func (s *DockerService) CreateInstance(ctx context.Context, name string) (string, error) {
-	if err := s.ensureImage(ctx, s.image); err != nil {
+func (s *DockerService) CreateInstance(ctx context.Context, name, imageID string) (string, error) {
+	if s.registry == nil {
+		return "", fmt.Errorf("image registry is not configured")
+	}
+
+	regImage, err := s.registry.GetImage(ctx, imageID)
+	if err != nil {
+		return "", err
+	}
+
+	if err := s.ensureImage(ctx, regImage.Image); err != nil {
 		return "", err
 	}
 
 	resp, err := s.cli.ContainerCreate(ctx, &container.Config{
-		Image: s.image,
+		Image: regImage.Image,
 		Cmd:   []string{"sleep", "3600"},
 		Labels: map[string]string{
 			managedLabelKey: managedLabelValue,

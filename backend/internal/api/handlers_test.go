@@ -14,7 +14,7 @@ import (
 // mockService 为 Handler 测试实现 InstanceService。
 type mockService struct {
 	listFn   func(ctx context.Context) ([]model.Instance, error)
-	createFn func(ctx context.Context, name string) (string, error)
+	createFn func(ctx context.Context, name, imageID string) (string, error)
 	startFn  func(ctx context.Context, id string) error
 	stopFn   func(ctx context.Context, id string) error
 	deleteFn func(ctx context.Context, id string) error
@@ -23,8 +23,8 @@ type mockService struct {
 func (m *mockService) ListInstances(ctx context.Context) ([]model.Instance, error) {
 	return m.listFn(ctx)
 }
-func (m *mockService) CreateInstance(ctx context.Context, name string) (string, error) {
-	return m.createFn(ctx, name)
+func (m *mockService) CreateInstance(ctx context.Context, name, imageID string) (string, error) {
+	return m.createFn(ctx, name, imageID)
 }
 func (m *mockService) StartInstance(ctx context.Context, id string) error {
 	return m.startFn(ctx, id)
@@ -36,9 +36,25 @@ func (m *mockService) DeleteInstance(ctx context.Context, id string) error {
 	return m.deleteFn(ctx, id)
 }
 
+type mockRegistryLister struct {
+	listFn func(ctx context.Context) []model.RegistryImage
+}
+
+func (m *mockRegistryLister) ListImages(ctx context.Context) []model.RegistryImage {
+	if m == nil || m.listFn == nil {
+		return []model.RegistryImage{}
+	}
+	return m.listFn(ctx)
+}
+
 func newTestRouter(m *mockService) http.Handler {
 	h := NewHandler(m)
-	return NewRouter(h)
+	rh := NewRegistryHandler(&mockRegistryLister{
+		listFn: func(_ context.Context) []model.RegistryImage {
+			return []model.RegistryImage{}
+		},
+	})
+	return NewRouter(h, rh)
 }
 
 // --- GET /api/instances 场景 ---
@@ -85,19 +101,48 @@ func TestGetInstances_Error(t *testing.T) {
 	}
 }
 
+func TestGetRegistryImages_Success(t *testing.T) {
+	h := NewHandler(&mockService{})
+	rh := NewRegistryHandler(&mockRegistryLister{
+		listFn: func(_ context.Context) []model.RegistryImage {
+			return []model.RegistryImage{{ID: "minecraft-java", Image: "itzg/minecraft-server:latest"}}
+		},
+	})
+	router := NewRouter(h, rh)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/registry/images", nil)
+	router.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var got []model.RegistryImage
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "minecraft-java" {
+		t.Fatalf("unexpected response: %+v", got)
+	}
+}
+
 // --- POST /api/instances 场景 ---
 
 func TestCreateInstance_Success(t *testing.T) {
 	router := newTestRouter(&mockService{
-		createFn: func(_ context.Context, name string) (string, error) {
+		createFn: func(_ context.Context, name, imageID string) (string, error) {
 			if name != "test-server" {
 				t.Fatalf("unexpected name: %s", name)
+			}
+			if imageID != "minecraft-java" {
+				t.Fatalf("unexpected image_id: %s", imageID)
 			}
 			return "abc123", nil
 		},
 	})
 
-	body := `{"name":"test-server"}`
+	body := `{"name":"test-server","image_id":"minecraft-java"}`
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(body))
 	router.ServeHTTP(w, r)
@@ -131,7 +176,19 @@ func TestCreateInstance_EmptyName(t *testing.T) {
 	router := newTestRouter(&mockService{})
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(`{"name":"  "}`))
+	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(`{"name":"  ","image_id":"minecraft-java"}`))
+	router.ServeHTTP(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestCreateInstance_EmptyImageID(t *testing.T) {
+	router := newTestRouter(&mockService{})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(`{"name":"server","image_id":"   "}`))
 	router.ServeHTTP(w, r)
 
 	if w.Code != http.StatusBadRequest {
@@ -141,17 +198,33 @@ func TestCreateInstance_EmptyName(t *testing.T) {
 
 func TestCreateInstance_NameConflict(t *testing.T) {
 	router := newTestRouter(&mockService{
-		createFn: func(_ context.Context, _ string) (string, error) {
+		createFn: func(_ context.Context, _, _ string) (string, error) {
 			return "", model.ErrNameExists
 		},
 	})
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(`{"name":"dup"}`))
+	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(`{"name":"dup","image_id":"minecraft-java"}`))
 	router.ServeHTTP(w, r)
 
 	if w.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d", w.Code)
+	}
+}
+
+func TestCreateInstance_ImageNotFound(t *testing.T) {
+	router := newTestRouter(&mockService{
+		createFn: func(_ context.Context, _, _ string) (string, error) {
+			return "", model.ErrImageNotFound
+		},
+	})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(`{"name":"dup","image_id":"not-exists"}`))
+	router.ServeHTTP(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
 	}
 }
 

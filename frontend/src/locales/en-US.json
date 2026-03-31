@@ -10,6 +10,10 @@
   "createModal": {
     "title": "New Container",
     "placeholder": "Enter container name...",
+    "imageLabel": "Select Image",
+    "imagePlaceholder": "Please select an image",
+    "loadingImages": "Loading image list...",
+    "noImages": "No images available right now. Please try again later.",
     "cancel": "Cancel",
     "confirm": "OK"
   },
@@ -18,6 +22,7 @@
     "listRefreshed": "Container list refreshed.",
     "noContainers": "No containers available.",
     "emptyName": "Container name cannot be empty",
+    "emptyImage": "Please select a container image",
     "creating": "Creating container...",
     "deleting": "Deleting container...",
     "stopping": "Stopping container: {name}...",
@@ -33,6 +38,8 @@
     "internal": "The service is temporarily unavailable. Please try again later.",
     "requestFailedWithStatus": "Request failed (status: {status}).",
     "invalidJsonBody": "The request body format is invalid.",
+    "imageIdRequired": "You must select an image before creating a container.",
+    "imageNotFound": "The selected image does not exist. Please refresh and try again.",
     "invalidContainerId": "The container ID is invalid.",
     "instanceNameExists": "Container name already exists. Please choose another one.",
     "instanceRunning": "The container is running. Stop it before deleting.",

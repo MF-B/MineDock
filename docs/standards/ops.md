@@ -17,7 +17,7 @@
 
 - 后端：
   - `MINEDOCK_DB_PATH`（默认 `data/minedock.db`）
-  - `MINEDOCK_IMAGE`（默认 `alpine:latest`）
+  - `MINEDOCK_REGISTRY_PATH`（默认 `registry.json`）
 - 前端：
   - `VITE_API_BASE_URL`（默认 `/api`）
 

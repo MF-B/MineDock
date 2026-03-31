@@ -92,14 +92,29 @@ export interface Instance {
   status: string;
 }
 
+export interface RegistryImage {
+  id: string;
+  name: string;
+  image: string;
+  description: string;
+  category: string;
+  icon: string;
+  default_env: Record<string, string>;
+  default_ports: string[];
+}
+
 export function listInstances(): Promise<Instance[]> {
   return request<Instance[]>("/instances", { method: "GET" });
 }
 
-export function createInstance(name: string): Promise<unknown> {
+export function listRegistryImages(): Promise<RegistryImage[]> {
+  return request<RegistryImage[]>("/registry/images", { method: "GET" });
+}
+
+export function createInstance(name: string, imageId: string): Promise<unknown> {
   return request("/instances", {
     method: "POST",
-    body: { name },
+    body: { name, image_id: imageId },
   });
 }
 
