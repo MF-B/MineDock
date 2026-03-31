@@ -274,29 +274,29 @@ func (h *RegistryHandler) GetImages(w http.ResponseWriter, r *http.Request) { ..
 
 ## 执行步骤
 
-- [ ] 后端 Model 层
-  - [ ] 新建 `backend/internal/model/registry.go`，定义 `RegistryImage` 结构体
-  - [ ] 修改 `backend/internal/model/errors.go`，新增 `ErrImageNotFound`
-- [ ] 后端注册表数据
-  - [ ] 新建 `backend/registry.json`，写入初始镜像条目
-- [ ] 后端 Service 层
-  - [ ] 新建 `backend/internal/service/registry_service.go`，实现 `RegistryService`
-  - [ ] 编写 `registry_service_test.go` 单元测试（加载合法/非法 JSON、按 ID 查询）
-  - [ ] 修改 `backend/internal/service/docker_service.go`：移除 `image` 字段和 `defaultImage` 常量、新增 `ImageRegistry` 接口依赖、更新 `CreateInstance` 签名
-- [ ] 后端 API 层
-  - [ ] 新建 `backend/internal/api/registry_handlers.go`，实现 `RegistryHandler`
-  - [ ] 修改 `backend/internal/api/handlers.go`：`createRequest` 增加 `ImageID`、`InstanceService` 接口同步更新
-  - [ ] 修改 `backend/internal/api/router.go`：注册 `GET /api/registry/images`
-  - [ ] 更新 `handlers_test.go`：适配新的 `CreateInstance` 签名
-- [ ] 后端入口
-  - [ ] 修改 `backend/main.go`：移除 `MINEDOCK_IMAGE`、初始化 `RegistryService`、注入 `DockerService`、创建 `RegistryHandler`
-- [ ] 前端适配
-  - [ ] 修改 `frontend/src/api/index.ts`：新增 `RegistryImage` 类型和 `listRegistryImages()` 函数、更新 `createInstance` 签名
-  - [ ] 新建 `frontend/src/stores/registry.ts`：镜像注册表 Pinia store
-  - [ ] 修改 `frontend/src/stores/containers.ts`：`create` action 增加 `imageId` 参数
-- [ ] 文档更新
-  - [ ] 修改 `docs/api/contracts.md`：新增 `GET /api/registry/images`、更新 `POST /api/instances`
-  - [ ] 修改 `docs/design-docs/instance_lifecycle.md`：补充 `ImageID` 字段
+- [x] 后端 Model 层
+  - [x] 新建 `backend/internal/model/registry.go`，定义 `RegistryImage` 结构体
+  - [x] 修改 `backend/internal/model/errors.go`，新增 `ErrImageNotFound`
+- [x] 后端注册表数据
+  - [x] 新建 `backend/registry.json`，写入初始镜像条目
+- [x] 后端 Service 层
+  - [x] 新建 `backend/internal/service/registry_service.go`，实现 `RegistryService`
+  - [x] 编写 `registry_service_test.go` 单元测试（加载合法/非法 JSON、按 ID 查询）
+  - [x] 修改 `backend/internal/service/docker_service.go`：移除 `image` 字段和 `defaultImage` 常量、新增 `ImageRegistry` 接口依赖、更新 `CreateInstance` 签名
+- [x] 后端 API 层
+  - [x] 新建 `backend/internal/api/registry_handlers.go`，实现 `RegistryHandler`
+  - [x] 修改 `backend/internal/api/handlers.go`：`createRequest` 增加 `ImageID`、`InstanceService` 接口同步更新
+  - [x] 修改 `backend/internal/api/router.go`：注册 `GET /api/registry/images`
+  - [x] 更新 `handlers_test.go`：适配新的 `CreateInstance` 签名
+- [x] 后端入口
+  - [x] 修改 `backend/main.go`：移除 `MINEDOCK_IMAGE`、初始化 `RegistryService`、注入 `DockerService`、创建 `RegistryHandler`
+- [x] 前端适配
+  - [x] 修改 `frontend/src/api/index.ts`：新增 `RegistryImage` 类型和 `listRegistryImages()` 函数、更新 `createInstance` 签名
+  - [x] 新建 `frontend/src/stores/registry.ts`：镜像注册表 Pinia store
+  - [x] 修改 `frontend/src/stores/containers.ts`：`create` action 增加 `imageId` 参数
+- [x] 文档更新
+  - [x] 修改 `docs/api/contracts.md`：新增 `GET /api/registry/images`、更新 `POST /api/instances`
+  - [x] 修改 `docs/design-docs/instance_lifecycle.md`：补充 `ImageID` 字段
 
 ## 已确认的决策
 
