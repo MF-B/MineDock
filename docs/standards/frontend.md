@@ -67,7 +67,9 @@
 
 ## 6. 路由与鉴权
 
-- 当前仅包含基础路由 `/`，映射容器列表页。
+- 当前路由：
+  - `/` 映射容器列表页（`ContainerList.vue`）
+  - `/registry` 映射镜像市场页（`ImageRegistry.vue`）
 - 当前版本无登录鉴权。
 - 新增页面时要求：
   - 在 `router/index.ts` 显式注册路由
