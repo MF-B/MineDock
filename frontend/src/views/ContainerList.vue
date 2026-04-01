@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from "vue";
+import { computed, ref, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useContainerStore } from "../stores/containers";
 import { useRegistryStore } from "../stores/registry";
+import { useInstanceSync } from "../composables/useInstanceSync";
 
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const store = useContainerStore();
 const registryStore = useRegistryStore();
+const instanceSync = useInstanceSync();
 
 const showCreateModal = ref(false);
 const newContainerName = ref("");
@@ -27,7 +29,12 @@ const selectedImageDescription = computed(() => {
 });
 
 onMounted(() => {
+  instanceSync.start();
   void initializeList();
+});
+
+onUnmounted(() => {
+  instanceSync.stop();
 });
 
 function ensureDefaultImageSelection(): void {

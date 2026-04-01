@@ -43,7 +43,8 @@ stateDiagram-v2
 
 - 事实来源：Docker Daemon。
 - 缓存来源：SQLite（用于实例名、状态缓存和恢复）。
-- 收敛机制：`ListInstances` 周期性/调用时同步 Docker -> SQLite。
+- 收敛机制（主路径）：监听 Docker Events，在容器状态变化后通过 WebSocket 推送最新实例快照。
+- 收敛机制（降级路径）：`ListInstances` 按需对账 Docker -> SQLite；当前端 WebSocket 不可用时回退到轮询接口。
 
 ## 失败与回滚策略
 

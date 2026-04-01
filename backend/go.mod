@@ -3,6 +3,7 @@ module minedock/backend
 go 1.25.0
 
 require (
+	github.com/coder/websocket v1.8.14
 	github.com/docker/docker v28.0.1+incompatible
 	modernc.org/sqlite v1.47.0
 )

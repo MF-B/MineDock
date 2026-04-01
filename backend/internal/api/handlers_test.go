@@ -54,7 +54,7 @@ func newTestRouter(m *mockService) http.Handler {
 			return []model.RegistryImage{}
 		},
 	})
-	return NewRouter(h, rh)
+	return NewRouter(h, rh, nil)
 }
 
 // --- GET /api/instances 场景 ---
@@ -108,7 +108,7 @@ func TestGetRegistryImages_Success(t *testing.T) {
 			return []model.RegistryImage{{ID: "minecraft-java", Image: "itzg/minecraft-server:latest"}}
 		},
 	})
-	router := NewRouter(h, rh)
+	router := NewRouter(h, rh, nil)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/registry/images", nil)
