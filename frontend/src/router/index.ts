@@ -9,6 +9,11 @@ const router = createRouter({
       name: "ContainerList",
       component: ContainerList,
     },
+    {
+      path: "/registry",
+      name: "ImageRegistry",
+      component: () => import("../views/ImageRegistry.vue"),
+    },
   ],
 });
 

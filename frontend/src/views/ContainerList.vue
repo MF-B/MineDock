@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useContainerStore } from "../stores/containers";
 import { useRegistryStore } from "../stores/registry";
 
 const { t } = useI18n();
+const route = useRoute();
+const router = useRouter();
 const store = useContainerStore();
 const registryStore = useRegistryStore();
 
@@ -38,15 +41,54 @@ function openCreateModal(): void {
   ensureDefaultImageSelection();
 }
 
+function getImageIdFromQuery(): string {
+  const raw = route.query.imageId;
+  if (Array.isArray(raw)) {
+    return typeof raw[0] === "string" ? raw[0].trim() : "";
+  }
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
+function preselectImageFromQuery(imageId: string): void {
+  const image = registryStore.getById(imageId);
+  if (!image) {
+    store.printErrorKey("errors.imageNotFound");
+    return;
+  }
+
+  selectedImageId.value = image.id;
+  openCreateModal();
+}
+
+async function clearImageIdQuery(): Promise<void> {
+  const nextQuery = { ...route.query };
+  delete nextQuery.imageId;
+  await router.replace({ path: route.path, query: nextQuery });
+}
+
 // 页面启动时统一触发列表拉取，并输出首屏可读状态。
 async function initializeList(): Promise<void> {
   store.print(t("status.waiting"));
+  const imageIdFromQuery = getImageIdFromQuery();
+
+  // 已有缓存时优先弹窗，避免从市场页回跳后再次等待网络。
+  if (imageIdFromQuery && registryStore.getById(imageIdFromQuery)) {
+    preselectImageFromQuery(imageIdFromQuery);
+  }
 
   try {
     await registryStore.fetchImages();
     ensureDefaultImageSelection();
+
+    if (imageIdFromQuery && !showCreateModal.value) {
+      preselectImageFromQuery(imageIdFromQuery);
+    }
   } catch (err) {
     store.printError(err);
+  } finally {
+    if (imageIdFromQuery) {
+      await clearImageIdQuery();
+    }
   }
 
   const success = await store.fetchInstances();
@@ -164,14 +206,16 @@ async function handleToggle(instance: {
         <select
           id="image-select"
           v-model="selectedImageId"
-          :disabled="registryStore.loading || registryStore.images.length === 0"
+          :disabled="registryStore.images.length === 0"
         >
           <option value="" disabled>{{ $t("createModal.imagePlaceholder") }}</option>
           <option v-for="image in registryStore.images" :key="image.id" :value="image.id">
             {{ image.name }}
           </option>
         </select>
-        <p v-if="registryStore.loading" class="modal-hint">{{ $t("createModal.loadingImages") }}</p>
+        <p v-if="registryStore.loading && registryStore.images.length === 0" class="modal-hint">
+          {{ $t("createModal.loadingImages") }}
+        </p>
         <p v-else-if="registryStore.images.length === 0" class="modal-hint">
           {{ $t("createModal.noImages") }}
         </p>
@@ -184,7 +228,7 @@ async function handleToggle(instance: {
           </button>
           <button
             class="btn-confirm"
-            :disabled="registryStore.loading || registryStore.images.length === 0"
+            :disabled="registryStore.images.length === 0"
             @click="handleCreate"
           >
             {{ $t("createModal.confirm") }}

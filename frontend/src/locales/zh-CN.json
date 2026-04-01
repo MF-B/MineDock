@@ -46,7 +46,15 @@
     "unknown": "发生未知错误，请稍后重试。"
   },
   "sidebar": {
-    "containerList": "容器列表"
+    "containerList": "容器列表",
+    "imageRegistry": "镜像市场"
+  },
+  "registry": {
+    "title": "镜像市场",
+    "filterAll": "全部",
+    "emptyState": "暂无可用镜像。",
+    "loading": "正在加载镜像列表...",
+    "loadError": "镜像列表加载失败，请稍后重试。"
   },
   "topbar": {
     "switchLanguage": "切换语言",

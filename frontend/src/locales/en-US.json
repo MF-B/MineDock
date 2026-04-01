@@ -46,7 +46,15 @@
     "unknown": "An unknown error occurred. Please try again later."
   },
   "sidebar": {
-    "containerList": "Containers"
+    "containerList": "Containers",
+    "imageRegistry": "Images"
+  },
+  "registry": {
+    "title": "Image Marketplace",
+    "filterAll": "All",
+    "emptyState": "No images available.",
+    "loading": "Loading image list...",
+    "loadError": "Failed to load image list. Please try again later."
   },
   "topbar": {
     "switchLanguage": "Switch Language",
