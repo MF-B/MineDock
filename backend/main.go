@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -40,10 +41,17 @@ func main() {
 		log.Fatalf("init registry service: %v", err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	svc := service.NewDockerService(cli, sqliteStore, registrySvc)
+	hub := service.NewEventHub(cli, svc.ListInstances)
+	go hub.Run(ctx)
+
 	h := api.NewHandler(svc)
 	registryHandler := api.NewRegistryHandler(registrySvc)
-	router := api.NewRouter(h, registryHandler)
+	wsHandler := api.NewWsHandler(hub)
+	router := api.NewRouter(h, registryHandler, wsHandler)
 
 	addr := ":8080"
 	log.Printf("MineDock backend listening on %s", addr)

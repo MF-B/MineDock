@@ -58,6 +58,8 @@
   },
   "topbar": {
     "switchLanguage": "切换语言",
+    "realtimeConnected": "实时同步已连接",
+    "realtimeDisconnected": "实时同步已断开，轮询模式",
     "zhCN": "简体中文",
     "enUS": "English"
   }

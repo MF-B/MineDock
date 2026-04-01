@@ -58,6 +58,8 @@
   },
   "topbar": {
     "switchLanguage": "Switch Language",
+    "realtimeConnected": "Realtime sync connected",
+    "realtimeDisconnected": "Realtime sync disconnected, polling mode",
     "zhCN": "简体中文",
     "enUS": "English"
   }

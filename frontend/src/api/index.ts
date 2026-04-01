@@ -1,6 +1,17 @@
 const BASE_URL: string =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || "/api";
 
+const runtimeOrigin = typeof window === "undefined" ? "http://localhost" : window.location.origin;
+const resolvedBaseURL: URL = new URL(BASE_URL, runtimeOrigin);
+
+// WebSocket 仅支持同源连接：固定使用当前页面 origin，只复用 API 基础路径。
+const pageProtocol =
+  typeof window === "undefined" ? resolvedBaseURL.protocol : window.location.protocol;
+const wsProtocol = pageProtocol === "https:" ? "wss:" : "ws:";
+const wsHost = typeof window === "undefined" ? resolvedBaseURL.host : window.location.host;
+const wsPath = resolvedBaseURL.pathname.replace(/\/+$/, "");
+export const WS_BASE_URL = `${wsProtocol}//${wsHost}${wsPath}`;
+
 type JsonObject = Record<string, unknown>;
 
 interface RequestOptions extends Omit<RequestInit, "headers" | "body"> {
@@ -91,6 +102,13 @@ export interface Instance {
   name: string;
   status: string;
 }
+
+export interface WsInstancesUpdated {
+  type: "instances_updated";
+  data: Instance[];
+}
+
+export type WsMessage = WsInstancesUpdated;
 
 export interface RegistryImage {
   id: string;

@@ -102,3 +102,20 @@
 ```json
 { "status": "success" }
 ```
+
+### GET /api/ws/events (WebSocket)
+
+- 说明：建立 WebSocket 连接，实时接收容器状态变更推送
+- 协议：WebSocket（HTTP Upgrade）
+- 同源限制：仅支持同源连接（`Origin` 必须与请求 `Host` 一致），当前版本不支持跨域 WebSocket
+- 消息格式（服务端 -> 客户端）：
+
+```json
+{
+  "type": "instances_updated",
+  "data": [{ "container_id": "xxx", "name": "xxx", "status": "Running" }]
+}
+```
+
+- 触发时机：任一托管容器状态发生变化（`start` / `stop` / `die` / `destroy` / `kill`）
+- 降级方案：客户端连接失败时应回退到轮询 `GET /api/instances`
