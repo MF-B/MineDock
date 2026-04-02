@@ -110,29 +110,98 @@ export interface WsInstancesUpdated {
 
 export type WsMessage = WsInstancesUpdated;
 
-export interface RegistryImage {
+export interface Game {
   id: string;
   name: string;
-  image: string;
   description: string;
   category: string;
   icon: string;
-  default_env: Record<string, string>;
-  default_ports: string[];
+}
+
+export interface TemplateImage {
+  name: string;
+  tag: string;
+}
+
+export interface PortMapping {
+  host: number;
+  container: number;
+  protocol: string;
+}
+
+export interface VolumeMount {
+  name: string;
+  container_path: string;
+  readonly: boolean;
+}
+
+export interface ResourceLimits {
+  memory: string;
+  cpu: number;
+}
+
+export interface HealthCheckConfig {
+  test: string[];
+  interval: string;
+  timeout: string;
+  retries: number;
+  start_period: string;
+}
+
+export interface ContainerConfig {
+  ports: PortMapping[];
+  env: Record<string, string>;
+  volumes: VolumeMount[];
+  resources?: ResourceLimits;
+  command?: string[];
+  health_check?: HealthCheckConfig;
+}
+
+export interface ParamOption {
+  value: string;
+  label: string;
+}
+
+export type TemplateParamType = "string" | "number" | "boolean" | "select";
+
+export type TemplateParamDefault = string | number | boolean;
+
+export interface TemplateParam {
+  key: string;
+  label: string;
+  description: string;
+  type: TemplateParamType;
+  default: TemplateParamDefault;
+  options?: ParamOption[];
+  env_var?: string;
+}
+
+export interface GameTemplate {
+  image: TemplateImage;
+  container: ContainerConfig;
+  params: TemplateParam[];
 }
 
 export function listInstances(): Promise<Instance[]> {
   return request<Instance[]>("/instances", { method: "GET" });
 }
 
-export function listRegistryImages(): Promise<RegistryImage[]> {
-  return request<RegistryImage[]>("/registry/images", { method: "GET" });
+export function listGames(): Promise<Game[]> {
+  return request<Game[]>("/games", { method: "GET" });
 }
 
-export function createInstance(name: string, imageId: string): Promise<unknown> {
+export function getGameTemplate(id: string): Promise<GameTemplate> {
+  return request<GameTemplate>(`/games/${encodeURIComponent(id)}/template`, { method: "GET" });
+}
+
+export function createInstance(
+  name: string,
+  gameId: string,
+  params: Record<string, string> = {},
+): Promise<unknown> {
   return request("/instances", {
     method: "POST",
-    body: { name, image_id: imageId },
+    body: { name, game_id: gameId, params },
   });
 }
 

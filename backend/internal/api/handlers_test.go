@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,7 +15,7 @@ import (
 // mockService 为 Handler 测试实现 InstanceService。
 type mockService struct {
 	listFn   func(ctx context.Context) ([]model.Instance, error)
-	createFn func(ctx context.Context, name, imageID string) (string, error)
+	createFn func(ctx context.Context, name, gameID string, params map[string]string) (string, error)
 	startFn  func(ctx context.Context, id string) error
 	stopFn   func(ctx context.Context, id string) error
 	deleteFn func(ctx context.Context, id string) error
@@ -23,8 +24,8 @@ type mockService struct {
 func (m *mockService) ListInstances(ctx context.Context) ([]model.Instance, error) {
 	return m.listFn(ctx)
 }
-func (m *mockService) CreateInstance(ctx context.Context, name, imageID string) (string, error) {
-	return m.createFn(ctx, name, imageID)
+func (m *mockService) CreateInstance(ctx context.Context, name, gameID string, params map[string]string) (string, error) {
+	return m.createFn(ctx, name, gameID, params)
 }
 func (m *mockService) StartInstance(ctx context.Context, id string) error {
 	return m.startFn(ctx, id)
@@ -37,24 +38,35 @@ func (m *mockService) DeleteInstance(ctx context.Context, id string) error {
 }
 
 type mockRegistryLister struct {
-	listFn func(ctx context.Context) []model.RegistryImage
+	listFn     func(ctx context.Context) []model.Game
+	getTplByID func(ctx context.Context, id string) (model.GameTemplate, error)
 }
 
-func (m *mockRegistryLister) ListImages(ctx context.Context) []model.RegistryImage {
+func (m *mockRegistryLister) ListGames(ctx context.Context) []model.Game {
 	if m == nil || m.listFn == nil {
-		return []model.RegistryImage{}
+		return []model.Game{}
 	}
 	return m.listFn(ctx)
 }
 
+func (m *mockRegistryLister) GetTemplate(ctx context.Context, id string) (model.GameTemplate, error) {
+	if m == nil || m.getTplByID == nil {
+		return model.GameTemplate{}, model.ErrGameNotFound
+	}
+	return m.getTplByID(ctx, id)
+}
+
 func newTestRouter(m *mockService) http.Handler {
 	h := NewHandler(m)
-	rh := NewRegistryHandler(&mockRegistryLister{
-		listFn: func(_ context.Context) []model.RegistryImage {
-			return []model.RegistryImage{}
+	gh := NewGameHandler(&mockRegistryLister{
+		listFn: func(_ context.Context) []model.Game {
+			return []model.Game{}
+		},
+		getTplByID: func(_ context.Context, _ string) (model.GameTemplate, error) {
+			return model.GameTemplate{}, model.ErrGameNotFound
 		},
 	})
-	return NewRouter(h, rh, nil)
+	return NewRouter(h, gh, nil)
 }
 
 // --- GET /api/instances 场景 ---
@@ -101,24 +113,27 @@ func TestGetInstances_Error(t *testing.T) {
 	}
 }
 
-func TestGetRegistryImages_Success(t *testing.T) {
+func TestGetGames_Success(t *testing.T) {
 	h := NewHandler(&mockService{})
-	rh := NewRegistryHandler(&mockRegistryLister{
-		listFn: func(_ context.Context) []model.RegistryImage {
-			return []model.RegistryImage{{ID: "minecraft-java", Image: "itzg/minecraft-server:latest"}}
+	gh := NewGameHandler(&mockRegistryLister{
+		listFn: func(_ context.Context) []model.Game {
+			return []model.Game{{ID: "minecraft-java", Name: "Minecraft Java"}}
+		},
+		getTplByID: func(_ context.Context, _ string) (model.GameTemplate, error) {
+			return model.GameTemplate{}, model.ErrGameNotFound
 		},
 	})
-	router := NewRouter(h, rh, nil)
+	router := NewRouter(h, gh, nil)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/api/registry/images", nil)
+	r := httptest.NewRequest(http.MethodGet, "/api/games", nil)
 	router.ServeHTTP(w, r)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var got []model.RegistryImage
+	var got []model.Game
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -127,22 +142,78 @@ func TestGetRegistryImages_Success(t *testing.T) {
 	}
 }
 
+func TestGetGameTemplate_Success(t *testing.T) {
+	h := NewHandler(&mockService{})
+	gh := NewGameHandler(&mockRegistryLister{
+		listFn: func(_ context.Context) []model.Game {
+			return []model.Game{{ID: "minecraft-java", Name: "Minecraft Java"}}
+		},
+		getTplByID: func(_ context.Context, id string) (model.GameTemplate, error) {
+			if id != "minecraft-java" {
+				return model.GameTemplate{}, model.ErrGameNotFound
+			}
+			return model.GameTemplate{Image: model.TemplateImage{Name: "itzg/minecraft-server", Tag: "latest"}}, nil
+		},
+	})
+	router := NewRouter(h, gh, nil)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/games/minecraft-java/template", nil)
+	router.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var got model.GameTemplate
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Image.FullImageRef() != "itzg/minecraft-server:latest" {
+		t.Fatalf("unexpected template response: %+v", got)
+	}
+}
+
+func TestGetGameTemplate_NotFound(t *testing.T) {
+	h := NewHandler(&mockService{})
+	gh := NewGameHandler(&mockRegistryLister{
+		listFn: func(_ context.Context) []model.Game {
+			return []model.Game{}
+		},
+		getTplByID: func(_ context.Context, _ string) (model.GameTemplate, error) {
+			return model.GameTemplate{}, model.ErrGameNotFound
+		},
+	})
+	router := NewRouter(h, gh, nil)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/games/not-exists/template", nil)
+	router.ServeHTTP(w, r)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 // --- POST /api/instances 场景 ---
 
 func TestCreateInstance_Success(t *testing.T) {
 	router := newTestRouter(&mockService{
-		createFn: func(_ context.Context, name, imageID string) (string, error) {
+		createFn: func(_ context.Context, name, gameID string, params map[string]string) (string, error) {
 			if name != "test-server" {
 				t.Fatalf("unexpected name: %s", name)
 			}
-			if imageID != "minecraft-java" {
-				t.Fatalf("unexpected image_id: %s", imageID)
+			if gameID != "minecraft-java" {
+				t.Fatalf("unexpected game_id: %s", gameID)
+			}
+			if params["SERVER_TYPE"] != "PAPER" {
+				t.Fatalf("unexpected params: %+v", params)
 			}
 			return "abc123", nil
 		},
 	})
 
-	body := `{"name":"test-server","image_id":"minecraft-java"}`
+	body := `{"name":"test-server","game_id":"minecraft-java","params":{"SERVER_TYPE":"PAPER"}}`
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(body))
 	router.ServeHTTP(w, r)
@@ -176,7 +247,7 @@ func TestCreateInstance_EmptyName(t *testing.T) {
 	router := newTestRouter(&mockService{})
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(`{"name":"  ","image_id":"minecraft-java"}`))
+	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(`{"name":"  ","game_id":"minecraft-java"}`))
 	router.ServeHTTP(w, r)
 
 	if w.Code != http.StatusBadRequest {
@@ -184,11 +255,11 @@ func TestCreateInstance_EmptyName(t *testing.T) {
 	}
 }
 
-func TestCreateInstance_EmptyImageID(t *testing.T) {
+func TestCreateInstance_EmptyGameID(t *testing.T) {
 	router := newTestRouter(&mockService{})
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(`{"name":"server","image_id":"   "}`))
+	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(`{"name":"server","game_id":"   "}`))
 	router.ServeHTTP(w, r)
 
 	if w.Code != http.StatusBadRequest {
@@ -198,13 +269,13 @@ func TestCreateInstance_EmptyImageID(t *testing.T) {
 
 func TestCreateInstance_NameConflict(t *testing.T) {
 	router := newTestRouter(&mockService{
-		createFn: func(_ context.Context, _, _ string) (string, error) {
+		createFn: func(_ context.Context, _, _ string, _ map[string]string) (string, error) {
 			return "", model.ErrNameExists
 		},
 	})
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(`{"name":"dup","image_id":"minecraft-java"}`))
+	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(`{"name":"dup","game_id":"minecraft-java"}`))
 	router.ServeHTTP(w, r)
 
 	if w.Code != http.StatusConflict {
@@ -212,15 +283,31 @@ func TestCreateInstance_NameConflict(t *testing.T) {
 	}
 }
 
-func TestCreateInstance_ImageNotFound(t *testing.T) {
+func TestCreateInstance_GameNotFound(t *testing.T) {
 	router := newTestRouter(&mockService{
-		createFn: func(_ context.Context, _, _ string) (string, error) {
-			return "", model.ErrImageNotFound
+		createFn: func(_ context.Context, _, _ string, _ map[string]string) (string, error) {
+			return "", model.ErrGameNotFound
 		},
 	})
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(`{"name":"dup","image_id":"not-exists"}`))
+	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(`{"name":"dup","game_id":"not-exists"}`))
+	router.ServeHTTP(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestCreateInstance_InvalidParams(t *testing.T) {
+	router := newTestRouter(&mockService{
+		createFn: func(_ context.Context, _, _ string, _ map[string]string) (string, error) {
+			return "", fmtWrap(model.ErrInvalidParams)
+		},
+	})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(`{"name":"dup","game_id":"minecraft-java","params":{"bad":"1"}}`))
 	router.ServeHTTP(w, r)
 
 	if w.Code != http.StatusBadRequest {
@@ -329,3 +416,27 @@ var errTest = errorString("test error")
 type errorString string
 
 func (e errorString) Error() string { return string(e) }
+
+func fmtWrap(err error) error {
+	if err == nil {
+		return nil
+	}
+	return wrappedError{err: err}
+}
+
+type wrappedError struct {
+	err error
+}
+
+func (e wrappedError) Error() string { return "wrapped: " + e.err.Error() }
+
+func (e wrappedError) Unwrap() error { return e.err }
+
+func TestMapErrorCode_InvalidParamsWrapped(t *testing.T) {
+	if got := mapErrorCode(fmtWrap(model.ErrInvalidParams)); got != http.StatusBadRequest {
+		t.Fatalf("expected 400 for wrapped invalid params, got %d", got)
+	}
+	if !errors.Is(fmtWrap(model.ErrInvalidParams), model.ErrInvalidParams) {
+		t.Fatal("expected wrapped error to match ErrInvalidParams")
+	}
+}

@@ -1,0 +1,34 @@
+image:
+  name: "ryshe/terraria"
+  tag: "latest"
+
+container:
+  ports:
+    - host: 7777
+      container: 7777
+      protocol: "tcp"
+  volumes:
+    - name: "world-data"
+      container_path: "/root/.local/share/Terraria/Worlds"
+  resources:
+    memory: "1g"
+    cpu: 1.0
+
+params:
+  - key: "WORLD_SIZE"
+    label: "世界大小"
+    description: "新建世界的尺寸"
+    type: "select"
+    default: "2"
+    options:
+      - value: "1"
+        label: "小"
+      - value: "2"
+        label: "中"
+      - value: "3"
+        label: "大"
+  - key: "MAX_PLAYERS"
+    label: "最大玩家数"
+    description: "服务器最大在线人数"
+    type: "number"
+    default: 8

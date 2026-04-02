@@ -1,31 +1,20 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { computed, onMounted, onUnmounted } from "vue";
+import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useContainerStore } from "../stores/containers";
-import { useRegistryStore } from "../stores/registry";
 import { useInstanceSync } from "../composables/useInstanceSync";
 
 const { t } = useI18n();
-const route = useRoute();
 const router = useRouter();
 const store = useContainerStore();
-const registryStore = useRegistryStore();
 const instanceSync = useInstanceSync();
-
-const showCreateModal = ref(false);
-const newContainerName = ref("");
-const selectedImageId = ref("");
 
 const outputText = computed(() => {
   if (store.outputI18n) {
     return t(store.outputI18n.key, store.outputI18n.values ?? {});
   }
   return store.output;
-});
-
-const selectedImageDescription = computed(() => {
-  return registryStore.getById(selectedImageId.value)?.description ?? "";
 });
 
 onMounted(() => {
@@ -37,69 +26,12 @@ onUnmounted(() => {
   instanceSync.stop();
 });
 
-function ensureDefaultImageSelection(): void {
-  if (!selectedImageId.value && registryStore.images.length > 0) {
-    selectedImageId.value = registryStore.images[0].id;
-  }
-}
-
-function openCreateModal(): void {
-  showCreateModal.value = true;
-  ensureDefaultImageSelection();
-}
-
-function getImageIdFromQuery(): string {
-  const raw = route.query.imageId;
-  if (Array.isArray(raw)) {
-    return typeof raw[0] === "string" ? raw[0].trim() : "";
-  }
-  return typeof raw === "string" ? raw.trim() : "";
-}
-
-function preselectImageFromQuery(imageId: string): void {
-  const image = registryStore.getById(imageId);
-  if (!image) {
-    store.printErrorKey("errors.imageNotFound");
-    return;
-  }
-
-  selectedImageId.value = image.id;
-  openCreateModal();
-}
-
-async function clearImageIdQuery(): Promise<void> {
-  const nextQuery = { ...route.query };
-  delete nextQuery.imageId;
-  await router.replace({ path: route.path, query: nextQuery });
-}
-
-// 页面启动时统一触发列表拉取，并输出首屏可读状态。
 async function initializeList(): Promise<void> {
   store.print(t("status.waiting"));
-  const imageIdFromQuery = getImageIdFromQuery();
-
-  // 已有缓存时优先弹窗，避免从市场页回跳后再次等待网络。
-  if (imageIdFromQuery && registryStore.getById(imageIdFromQuery)) {
-    preselectImageFromQuery(imageIdFromQuery);
-  }
-
-  try {
-    await registryStore.fetchImages();
-    ensureDefaultImageSelection();
-
-    if (imageIdFromQuery && !showCreateModal.value) {
-      preselectImageFromQuery(imageIdFromQuery);
-    }
-  } catch (err) {
-    store.printError(err);
-  } finally {
-    if (imageIdFromQuery) {
-      await clearImageIdQuery();
-    }
-  }
-
   const success = await store.fetchInstances();
-  if (!success) return;
+  if (!success) {
+    return;
+  }
 
   if (store.instances.length > 0) {
     store.print(t("status.listRefreshed"));
@@ -108,26 +40,8 @@ async function initializeList(): Promise<void> {
   }
 }
 
-// 视图层仅做输入校验和 action 触发，副作用与错误收敛在 store 内完成。
-async function handleCreate(): Promise<void> {
-  const trimmed = newContainerName.value.trim();
-  if (!trimmed) {
-    store.printErrorKey("status.emptyName");
-    return;
-  }
-
-  const imageId = selectedImageId.value.trim();
-  if (!imageId) {
-    store.printErrorKey("status.emptyImage");
-    return;
-  }
-
-  store.print(t("status.creating"));
-  const success = await store.create(trimmed, imageId);
-  if (success) {
-    showCreateModal.value = false;
-    newContainerName.value = "";
-  }
+function goToTemplateMarket(): void {
+  void router.push({ name: "ImageRegistry" });
 }
 
 // 删除属于破坏性操作，执行前必须二次确认。
@@ -168,7 +82,7 @@ async function handleToggle(instance: {
   <main class="main-content">
     <!-- 列表操作栏 -->
     <div class="content-actions">
-      <button class="create-btn" @click="openCreateModal">
+      <button class="create-btn" @click="goToTemplateMarket">
         {{ $t("containers.createBtn") }}
       </button>
     </div>
@@ -195,50 +109,6 @@ async function handleToggle(instance: {
           </label>
           <button class="delete-btn" @click="handleDelete(item.container_id)">
             {{ $t("containers.delete") }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 新建容器的弹窗 (Modal) -->
-    <div v-if="showCreateModal" class="modal">
-      <div class="modal-content">
-        <h3>{{ $t("createModal.title") }}</h3>
-        <input
-          v-model="newContainerName"
-          :placeholder="$t('createModal.placeholder')"
-          @keyup.enter="handleCreate"
-        />
-        <label class="field-label" for="image-select">{{ $t("createModal.imageLabel") }}</label>
-        <select
-          id="image-select"
-          v-model="selectedImageId"
-          :disabled="registryStore.images.length === 0"
-        >
-          <option value="" disabled>{{ $t("createModal.imagePlaceholder") }}</option>
-          <option v-for="image in registryStore.images" :key="image.id" :value="image.id">
-            {{ image.name }}
-          </option>
-        </select>
-        <p v-if="registryStore.loading && registryStore.images.length === 0" class="modal-hint">
-          {{ $t("createModal.loadingImages") }}
-        </p>
-        <p v-else-if="registryStore.images.length === 0" class="modal-hint">
-          {{ $t("createModal.noImages") }}
-        </p>
-        <p v-else-if="selectedImageDescription" class="modal-hint">
-          {{ selectedImageDescription }}
-        </p>
-        <div class="modal-actions">
-          <button class="btn-cancel" @click="showCreateModal = false">
-            {{ $t("createModal.cancel") }}
-          </button>
-          <button
-            class="btn-confirm"
-            :disabled="registryStore.images.length === 0"
-            @click="handleCreate"
-          >
-            {{ $t("createModal.confirm") }}
           </button>
         </div>
       </div>
@@ -437,102 +307,6 @@ input:checked + .slider:before {
 }
 .slider.round:before {
   border-radius: 50%;
-}
-
-/* ========== 弹窗样式 ========== */
-.modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: var(--modal-overlay);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background-color: var(--modal-bg);
-  padding: 20px;
-  border-radius: 8px;
-  width: 360px;
-  border: 1px solid var(--create-brass-primary);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  box-shadow: 0 8px 24px var(--shadow-medium);
-}
-
-.modal-content h3 {
-  margin: 0;
-  color: var(--create-brass-primary);
-  font-size: 16px;
-}
-
-.modal-content input,
-.modal-content select {
-  padding: 8px 10px;
-  background: var(--input-bg);
-  border: 1px solid var(--input-border);
-  color: var(--text-on-dark);
-  border-radius: 4px;
-  outline: none;
-}
-
-.modal-content input:focus,
-.modal-content select:focus {
-  border-color: var(--create-brass-primary);
-}
-
-.field-label {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.modal-hint {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.btn-cancel {
-  padding: 6px 12px;
-  font-size: 13px;
-  background: transparent;
-  border: 1px solid var(--btn-secondary-border);
-  color: var(--btn-secondary-text);
-  border-radius: 4px;
-  cursor: pointer;
-}
-.btn-cancel:hover {
-  background: var(--hover-lighten);
-}
-
-.btn-confirm {
-  padding: 6px 12px;
-  font-size: 13px;
-  background: var(--create-brass-dark);
-  color: var(--text-on-dark);
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.btn-confirm:hover {
-  filter: brightness(1.1);
-}
-
-.btn-confirm:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 
 /* ========== 底部输出 ========== */

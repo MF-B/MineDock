@@ -10,8 +10,8 @@ type Instance struct {
     ContainerID string `json:"container_id"`
     // 服务端名称
     Name        string `json:"name"`
-    // 来源镜像的注册表 ID
-    ImageID     string `json:"image_id"`
+    // 来源游戏模板 ID（创建请求字段，当前版本未持久化到 instances 表）
+    GameID      string `json:"game_id"`
     // 当前运行态
     Status      string `json:"status"`
 }
