@@ -6,7 +6,7 @@ import (
 )
 
 // NewRouter 注册 API 路由并包装中间件。
-func NewRouter(h *Handler, registry *RegistryHandler, ws *WsHandler) http.Handler {
+func NewRouter(h *Handler, games *GameHandler, ws *WsHandler) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/instances", h.GetInstances)
@@ -17,8 +17,9 @@ func NewRouter(h *Handler, registry *RegistryHandler, ws *WsHandler) http.Handle
 	if ws != nil {
 		mux.HandleFunc("GET /api/ws/events", ws.HandleEvents)
 	}
-	if registry != nil {
-		mux.HandleFunc("GET /api/registry/images", registry.GetImages)
+	if games != nil {
+		mux.HandleFunc("GET /api/games", games.GetGames)
+		mux.HandleFunc("GET /api/games/{id}/template", games.GetGameTemplate)
 	}
 
 	return withCORS(mux)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
@@ -18,6 +19,7 @@ const (
 	managedLabelKey   = "minedock.managed"
 	managedLabelValue = "true"
 	nameLabelKey      = "minedock.name"
+	gameIDLabelKey    = "minedock.game_id"
 )
 
 // InstanceStore 定义 DockerService 依赖的持久化操作。
@@ -27,45 +29,63 @@ type InstanceStore interface {
 	Delete(ctx context.Context, containerID string) error
 }
 
-// ImageRegistry 定义 DockerService 依赖的镜像注册表查询能力。
-type ImageRegistry interface {
-	GetImage(ctx context.Context, id string) (model.RegistryImage, error)
+// GameRegistry 定义 DockerService 依赖的游戏与模板查询能力。
+type GameRegistry interface {
+	GetGame(ctx context.Context, id string) (model.Game, error)
+	GetTemplate(ctx context.Context, id string) (model.GameTemplate, error)
 }
 
 // DockerService 封装容器管理相关业务逻辑。
 type DockerService struct {
 	cli      *client.Client
 	store    InstanceStore
-	registry ImageRegistry
+	registry GameRegistry
 }
 
 // NewDockerService 使用依赖项创建 DockerService。
-func NewDockerService(cli *client.Client, s InstanceStore, registry ImageRegistry) *DockerService {
+func NewDockerService(cli *client.Client, s InstanceStore, registry GameRegistry) *DockerService {
 	return &DockerService{cli: cli, store: s, registry: registry}
 }
 
 // CreateInstance 创建托管容器并持久化实例元数据。
 // TODO: 让 Docker 创建与 SQLite 保存具备原子性。
-func (s *DockerService) CreateInstance(ctx context.Context, name, imageID string) (string, error) {
+func (s *DockerService) CreateInstance(ctx context.Context, name, gameID string, params map[string]string) (string, error) {
 	if s.registry == nil {
-		return "", fmt.Errorf("image registry is not configured")
+		return "", fmt.Errorf("game registry is not configured")
 	}
 
-	regImage, err := s.registry.GetImage(ctx, imageID)
+	game, err := s.registry.GetGame(ctx, gameID)
 	if err != nil {
 		return "", err
 	}
 
-	if err := s.ensureImage(ctx, regImage.Image); err != nil {
+	tpl, err := s.registry.GetTemplate(ctx, game.ID)
+	if err != nil {
+		return "", err
+	}
+
+	env, err := mergeTemplateEnv(tpl, params)
+	if err != nil {
+		return "", err
+	}
+
+	imageRef := tpl.Image.FullImageRef()
+	if strings.TrimSpace(imageRef) == "" {
+		return "", model.ErrTemplateInvalid
+	}
+
+	if err := s.ensureImage(ctx, imageRef); err != nil {
 		return "", err
 	}
 
 	resp, err := s.cli.ContainerCreate(ctx, &container.Config{
-		Image: regImage.Image,
+		Image: imageRef,
 		Cmd:   []string{"sleep", "3600"},
+		Env:   mapToDockerEnv(env),
 		Labels: map[string]string{
 			managedLabelKey: managedLabelValue,
 			nameLabelKey:    name,
+			gameIDLabelKey:  game.ID,
 		},
 	}, nil, nil, nil, "")
 	if err != nil {
@@ -80,6 +100,128 @@ func (s *DockerService) CreateInstance(ctx context.Context, name, imageID string
 	}
 
 	return resp.ID, nil
+}
+
+func mergeTemplateEnv(tpl model.GameTemplate, params map[string]string) (map[string]string, error) {
+	merged := make(map[string]string, len(tpl.Container.Env)+len(tpl.Params))
+	for key, value := range tpl.Container.Env {
+		merged[key] = value
+	}
+
+	paramDefs := make(map[string]model.TemplateParam, len(tpl.Params))
+	for _, param := range tpl.Params {
+		paramDefs[param.Key] = param
+
+		defaultValue, ok := stringifyTemplateDefault(param)
+		if !ok {
+			continue
+		}
+		envKey := strings.TrimSpace(param.EnvVar)
+		if envKey == "" {
+			envKey = param.Key
+		}
+		merged[envKey] = defaultValue
+	}
+
+	for key, rawValue := range params {
+		paramKey := strings.TrimSpace(key)
+		paramDef, exists := paramDefs[paramKey]
+		if !exists {
+			return nil, fmt.Errorf("unknown param key %q: %w", paramKey, model.ErrInvalidParams)
+		}
+
+		normalized, err := normalizeParamValue(paramDef, rawValue)
+		if err != nil {
+			return nil, err
+		}
+
+		envKey := strings.TrimSpace(paramDef.EnvVar)
+		if envKey == "" {
+			envKey = paramDef.Key
+		}
+		merged[envKey] = normalized
+	}
+
+	return merged, nil
+}
+
+func normalizeParamValue(param model.TemplateParam, raw string) (string, error) {
+	switch param.Type {
+	case "string":
+		return raw, nil
+	case "number":
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			return "", fmt.Errorf("param %q requires number value: %w", param.Key, model.ErrInvalidParams)
+		}
+		if _, err := strconv.ParseFloat(trimmed, 64); err != nil {
+			return "", fmt.Errorf("param %q has invalid number %q: %w", param.Key, raw, model.ErrInvalidParams)
+		}
+		return trimmed, nil
+	case "boolean":
+		trimmed := strings.TrimSpace(strings.ToLower(raw))
+		if trimmed == "" {
+			return "", fmt.Errorf("param %q requires boolean value: %w", param.Key, model.ErrInvalidParams)
+		}
+		v, err := strconv.ParseBool(trimmed)
+		if err != nil {
+			return "", fmt.Errorf("param %q has invalid boolean %q: %w", param.Key, raw, model.ErrInvalidParams)
+		}
+		if v {
+			return "true", nil
+		}
+		return "false", nil
+	case "select":
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			return "", fmt.Errorf("param %q requires selected value: %w", param.Key, model.ErrInvalidParams)
+		}
+		for _, option := range param.Options {
+			if option.Value == trimmed {
+				return trimmed, nil
+			}
+		}
+		return "", fmt.Errorf("param %q has unsupported value %q: %w", param.Key, raw, model.ErrInvalidParams)
+	default:
+		return "", fmt.Errorf("param %q has unsupported type %q: %w", param.Key, param.Type, model.ErrTemplateInvalid)
+	}
+}
+
+func stringifyTemplateDefault(param model.TemplateParam) (string, bool) {
+	if param.Default == nil {
+		return "", false
+	}
+
+	switch param.Type {
+	case "string", "select", "number":
+		value := strings.TrimSpace(fmt.Sprint(param.Default))
+		if value == "" {
+			return "", false
+		}
+		return value, true
+	case "boolean":
+		v, err := strconv.ParseBool(strings.TrimSpace(strings.ToLower(fmt.Sprint(param.Default))))
+		if err != nil {
+			return "", false
+		}
+		if v {
+			return "true", true
+		}
+		return "false", true
+	default:
+		return "", false
+	}
+}
+
+func mapToDockerEnv(m map[string]string) []string {
+	if len(m) == 0 {
+		return nil
+	}
+	env := make([]string, 0, len(m))
+	for key, value := range m {
+		env = append(env, fmt.Sprintf("%s=%s", key, value))
+	}
+	return env
 }
 
 // StartInstance 启动托管容器并更新持久化状态。

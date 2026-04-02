@@ -2,12 +2,12 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import type { RegistryImage } from "../api/index";
-import { useRegistryStore } from "../stores/registry";
+import type { Game } from "../api/index";
+import { useGameStore } from "../stores/games";
 
 const router = useRouter();
 const { t } = useI18n();
-const registryStore = useRegistryStore();
+const gameStore = useGameStore();
 
 const ALL_CATEGORY = "__all__";
 
@@ -22,15 +22,15 @@ const selectedCategory = ref(ALL_CATEGORY);
 const categoryTabs = computed(() => {
   return [
     { key: ALL_CATEGORY, label: t("registry.filterAll") },
-    ...registryStore.categories.map((category) => ({ key: category, label: category })),
+    ...gameStore.categories.map((category) => ({ key: category, label: category })),
   ];
 });
 
-const filteredImages = computed(() => {
+const filteredGames = computed(() => {
   if (selectedCategory.value === ALL_CATEGORY) {
-    return registryStore.images;
+    return gameStore.games;
   }
-  return registryStore.images.filter((image) => image.category === selectedCategory.value);
+  return gameStore.games.filter((game) => game.category === selectedCategory.value);
 });
 
 watch(categoryTabs, (tabs) => {
@@ -40,30 +40,30 @@ watch(categoryTabs, (tabs) => {
 });
 
 onMounted(() => {
-  void loadImages();
+  void loadGames();
 });
 
-async function loadImages(): Promise<void> {
+async function loadGames(): Promise<void> {
   try {
-    await registryStore.fetchImages();
+    await gameStore.fetchGames();
   } catch {
-    // error state is captured by registry store and rendered by the view.
+    // error state is captured by game store and rendered by the view.
   }
 }
 
-function getImageEmoji(image: RegistryImage): string {
-  const mapped = iconEmojiMap[image.icon];
+function getGameEmoji(game: Game): string {
+  const mapped = iconEmojiMap[game.icon];
   if (mapped) {
     return mapped;
   }
-  const fallback = image.name.trim().charAt(0);
+  const fallback = game.name.trim().charAt(0);
   return fallback ? fallback.toUpperCase() : "?";
 }
 
-function selectImage(imageId: string): void {
+function goToCreatePage(gameID: string): void {
   void router.push({
-    name: "ContainerList",
-    query: { imageId },
+    name: "CreateInstance",
+    params: { gameId: gameID },
   });
 }
 </script>
@@ -89,30 +89,30 @@ function selectImage(imageId: string): void {
       </button>
     </div>
 
-    <div v-if="registryStore.loading && registryStore.images.length === 0" class="state-message">
+    <div v-if="gameStore.loading && gameStore.games.length === 0" class="state-message">
       {{ $t("registry.loading") }}
     </div>
     <div
-      v-else-if="registryStore.error && registryStore.images.length === 0"
+      v-else-if="gameStore.error && gameStore.games.length === 0"
       class="state-message state-error"
     >
       {{ $t("registry.loadError") }}
     </div>
-    <div v-else-if="filteredImages.length === 0" class="state-message">
+    <div v-else-if="filteredGames.length === 0" class="state-message">
       {{ $t("registry.emptyState") }}
     </div>
-    <section v-else class="image-grid">
+    <section v-else class="game-grid">
       <button
-        v-for="image in filteredImages"
-        :key="image.id"
-        class="image-card"
+        v-for="game in filteredGames"
+        :key="game.id"
+        class="game-card"
         type="button"
-        @click="selectImage(image.id)"
+        @click="goToCreatePage(game.id)"
       >
-        <div class="image-icon">{{ getImageEmoji(image) }}</div>
-        <div class="image-name">{{ image.name }}</div>
-        <p class="image-description">{{ image.description }}</p>
-        <span class="category-badge">{{ image.category }}</span>
+        <div class="game-icon">{{ getGameEmoji(game) }}</div>
+        <div class="game-name">{{ game.name }}</div>
+        <p class="game-description">{{ game.description }}</p>
+        <span class="category-badge">{{ game.category }}</span>
       </button>
     </section>
   </main>
@@ -188,13 +188,13 @@ function selectImage(imageId: string): void {
   background: var(--danger-light);
 }
 
-.image-grid {
+.game-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
-.image-card {
+.game-card {
   text-align: left;
   border: 3px solid var(--card-border);
   background: var(--card-bg);
@@ -227,23 +227,23 @@ function selectImage(imageId: string): void {
     filter 0.2s ease;
 }
 
-.image-card:hover {
+.game-card:hover {
   transform: translateY(-2px);
   filter: brightness(0.97);
 }
 
-.image-icon {
+.game-icon {
   font-size: 32px;
   margin-bottom: 12px;
 }
 
-.image-name {
+.game-name {
   font-size: 17px;
   font-weight: 700;
   margin-bottom: 8px;
 }
 
-.image-description {
+.game-description {
   margin: 0 0 16px;
   color: #3b3b3b;
   font-size: 13px;
@@ -270,7 +270,7 @@ function selectImage(imageId: string): void {
     display: none;
   }
 
-  .image-grid {
+  .game-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -280,7 +280,7 @@ function selectImage(imageId: string): void {
     padding: 8px 16px 20px 16px;
   }
 
-  .image-grid {
+  .game-grid {
     grid-template-columns: 1fr;
   }
 }

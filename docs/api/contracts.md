@@ -22,9 +22,9 @@
 [{ "container_id": "xxx", "name": "xxx", "status": "xxx" }]
 ```
 
-### GET /api/registry/images
+### GET /api/games
 
-- 说明：获取注册表中所有可用的容器镜像列表
+- 说明：获取游戏目录轻量列表（用于市场页快速加载）
 - 状态码：
   - 成功：`200`
   - 失败：`500`
@@ -36,14 +36,59 @@
   {
     "id": "minecraft-java",
     "name": "Minecraft Java Edition",
-    "image": "itzg/minecraft-server:latest",
     "description": "...",
     "category": "minecraft",
-    "icon": "minecraft-java",
-    "default_env": { "EULA": "TRUE" },
-    "default_ports": ["25565:25565"]
+    "icon": "minecraft-java"
   }
 ]
+```
+
+### GET /api/games/:id/template
+
+- 说明：按游戏 ID 加载完整模板详情（YAML 解析结果）
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（ID 非法）、`404`（game 不存在）、`500`（模板不存在/模板非法）
+- 请求参数：
+  - 路径参数：`id`（game ID）
+- 返回结果：
+
+```json
+{
+  "image": {
+    "name": "itzg/minecraft-server",
+    "tag": "latest"
+  },
+  "container": {
+    "ports": [{ "host": 25565, "container": 25565, "protocol": "tcp" }],
+    "env": { "EULA": "TRUE", "TYPE": "PAPER" },
+    "volumes": [
+      { "name": "server-data", "container_path": "/data", "readonly": false }
+    ],
+    "resources": { "memory": "2g", "cpu": 2 },
+    "health_check": {
+      "test": ["CMD-SHELL", "mc-health"],
+      "interval": "30s",
+      "timeout": "10s",
+      "retries": 3,
+      "start_period": "120s"
+    }
+  },
+  "params": [
+    {
+      "key": "SERVER_TYPE",
+      "label": "服务器类型",
+      "description": "选择 Minecraft 服务器内核",
+      "type": "select",
+      "default": "PAPER",
+      "options": [
+        { "value": "PAPER", "label": "Paper" },
+        { "value": "FABRIC", "label": "Fabric" }
+      ],
+      "env_var": "TYPE"
+    }
+  ]
+}
 ```
 
 ### POST /api/instances
@@ -51,11 +96,18 @@
 - 说明：创建一个新容器（初始为 Stopped）
 - 状态码：
   - 成功：`200`
-  - 失败：`400`（JSON非法/空名称/缺失 image_id/image_id 不合法）、`409`（名称冲突）、`500`
+  - 失败：`400`（JSON非法/空名称/缺失 game_id/game_id 不合法/params 非法）、`409`（名称冲突）、`500`（模板不存在或模板非法）
 - 请求参数：
 
 ```json
-{ "name": "容器1号", "image_id": "minecraft-java" }
+{
+  "name": "容器1号",
+  "game_id": "minecraft-java",
+  "params": {
+    "SERVER_TYPE": "PAPER",
+    "ONLINE_MODE": "true"
+  }
+}
 ```
 
 - 返回结果：

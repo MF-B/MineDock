@@ -1,0 +1,479 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
+import type { GameTemplate, TemplateParam } from "../api/index";
+import { useGameStore } from "../stores/games";
+import { useContainerStore } from "../stores/containers";
+
+const route = useRoute();
+const router = useRouter();
+const { t } = useI18n();
+const gameStore = useGameStore();
+const containerStore = useContainerStore();
+
+const loading = ref(true);
+const creating = ref(false);
+const currentGameID = ref("");
+const containerName = ref("");
+const pageErrorKey = ref("");
+const paramValues = ref<Record<string, string>>({});
+
+const currentGame = computed(() => {
+  return gameStore.getGameById(currentGameID.value) ?? null;
+});
+
+const currentTemplate = computed<GameTemplate | null>(() => {
+  if (!currentGameID.value || gameStore.currentTemplateGameID !== currentGameID.value) {
+    return null;
+  }
+  return gameStore.currentTemplate;
+});
+
+watch(
+  () => route.params.gameId,
+  () => {
+    void initializeForRoute();
+  },
+);
+
+onMounted(() => {
+  void initializeForRoute();
+});
+
+function parseRouteGameID(value: unknown): string {
+  if (Array.isArray(value)) {
+    return typeof value[0] === "string" ? value[0].trim() : "";
+  }
+  return typeof value === "string" ? value.trim() : "";
+}
+
+async function initializeForRoute(): Promise<void> {
+  loading.value = true;
+  pageErrorKey.value = "";
+  containerName.value = "";
+  paramValues.value = {};
+
+  const gameID = parseRouteGameID(route.params.gameId);
+  currentGameID.value = gameID;
+
+  if (!gameID) {
+    pageErrorKey.value = "errors.gameNotFound";
+    loading.value = false;
+    return;
+  }
+
+  try {
+    await gameStore.fetchGames();
+  } catch {
+    pageErrorKey.value = "registry.loadError";
+    loading.value = false;
+    return;
+  }
+
+  if (!gameStore.getGameById(gameID)) {
+    pageErrorKey.value = "errors.gameNotFound";
+    loading.value = false;
+    return;
+  }
+
+  try {
+    await gameStore.fetchTemplate(gameID, true);
+    initParamValuesFromTemplate(currentTemplate.value);
+  } catch {
+    pageErrorKey.value = "registry.templateLoadError";
+  }
+
+  loading.value = false;
+}
+
+function initParamValuesFromTemplate(template: GameTemplate | null): void {
+  const next: Record<string, string> = {};
+  if (template) {
+    for (const param of template.params) {
+      next[param.key] = getDefaultParamValue(param);
+    }
+  }
+  paramValues.value = next;
+}
+
+function getDefaultParamValue(param: TemplateParam): string {
+  if (typeof param.default === "boolean") {
+    return param.default ? "true" : "false";
+  }
+  if (param.default == null) {
+    return "";
+  }
+  return String(param.default);
+}
+
+function isBooleanParamEnabled(key: string): boolean {
+  return paramValues.value[key] === "true";
+}
+
+function onBooleanParamChange(key: string, event: Event): void {
+  const target = event.target as HTMLInputElement;
+  paramValues.value = {
+    ...paramValues.value,
+    [key]: target.checked ? "true" : "false",
+  };
+}
+
+function getCreateParamsPayload(): Record<string, string> {
+  const template = currentTemplate.value;
+  if (!template) {
+    return {};
+  }
+
+  const payload: Record<string, string> = {};
+  for (const param of template.params) {
+    const value = paramValues.value[param.key];
+    if (typeof value === "string") {
+      payload[param.key] = value;
+    }
+  }
+  return payload;
+}
+
+function cancelCreate(): void {
+  void router.push({ name: "ImageRegistry" });
+}
+
+async function handleCreate(): Promise<void> {
+  const name = containerName.value.trim();
+  if (!name) {
+    pageErrorKey.value = "status.emptyName";
+    return;
+  }
+
+  const gameID = currentGameID.value.trim();
+  if (!gameID) {
+    pageErrorKey.value = "errors.gameNotFound";
+    return;
+  }
+
+  pageErrorKey.value = "";
+  creating.value = true;
+  containerStore.print(t("status.creating"));
+
+  const success = await containerStore.create(name, gameID, getCreateParamsPayload());
+  creating.value = false;
+  if (!success) {
+    pageErrorKey.value = containerStore.outputI18n?.key ?? "errors.unknown";
+    return;
+  }
+
+  void router.push({ name: "ContainerList" });
+}
+</script>
+
+<template>
+  <header class="page-header">
+    <h1 class="page-title">{{ $t("createPage.title") }}</h1>
+  </header>
+
+  <main class="main-content">
+    <div v-if="loading" class="state-message">
+      {{ $t("createPage.loading") }}
+    </div>
+
+    <div v-else-if="pageErrorKey" class="state-message state-error">
+      {{ $t(pageErrorKey) }}
+    </div>
+
+    <section v-else-if="currentGame" class="form-panel">
+      <header class="form-header">
+        <h2 class="game-title">{{ currentGame.name }}</h2>
+        <p class="game-description">{{ currentGame.description }}</p>
+      </header>
+
+      <div class="field-block">
+        <label class="field-label" for="instance-name">{{ $t("createPage.nameLabel") }}</label>
+        <input
+          id="instance-name"
+          v-model="containerName"
+          class="text-input"
+          :placeholder="$t('createPage.namePlaceholder')"
+          @keyup.enter="handleCreate"
+        />
+      </div>
+
+      <div v-if="gameStore.templateLoading" class="state-message compact">
+        {{ $t("createPage.loadingTemplate") }}
+      </div>
+
+      <div v-else-if="currentTemplate" class="field-block">
+        <h3 class="section-title">{{ $t("createPage.paramsTitle") }}</h3>
+
+        <div v-if="currentTemplate.params.length === 0" class="state-message compact">
+          {{ $t("createPage.noParams") }}
+        </div>
+
+        <div v-else class="param-list">
+          <article v-for="param in currentTemplate.params" :key="param.key" class="param-item">
+            <label class="field-label" :for="`param-${param.key}`">{{ param.label }}</label>
+            <p v-if="param.description" class="field-hint">{{ param.description }}</p>
+
+            <input
+              v-if="param.type === 'string'"
+              :id="`param-${param.key}`"
+              v-model="paramValues[param.key]"
+              class="text-input"
+              type="text"
+            />
+
+            <input
+              v-else-if="param.type === 'number'"
+              :id="`param-${param.key}`"
+              v-model="paramValues[param.key]"
+              class="text-input"
+              type="number"
+            />
+
+            <label
+              v-else-if="param.type === 'boolean'"
+              class="boolean-field"
+              :for="`param-${param.key}`"
+            >
+              <input
+                :id="`param-${param.key}`"
+                type="checkbox"
+                :checked="isBooleanParamEnabled(param.key)"
+                @change="onBooleanParamChange(param.key, $event)"
+              />
+              <span>
+                {{
+                  isBooleanParamEnabled(param.key)
+                    ? $t("createPage.booleanEnabled")
+                    : $t("createPage.booleanDisabled")
+                }}
+              </span>
+            </label>
+
+            <select
+              v-else-if="param.type === 'select'"
+              :id="`param-${param.key}`"
+              v-model="paramValues[param.key]"
+              class="text-input"
+            >
+              <option
+                v-for="option in param.options || []"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </article>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-cancel" type="button" @click="cancelCreate">
+          {{ $t("createPage.cancel") }}
+        </button>
+        <button class="btn-confirm" type="button" :disabled="creating" @click="handleCreate">
+          {{ creating ? $t("createPage.creating") : $t("createPage.confirm") }}
+        </button>
+      </div>
+    </section>
+  </main>
+</template>
+
+<style scoped>
+.page-header {
+  height: var(--header-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.page-title {
+  margin: 0;
+  color: var(--create-brass-primary);
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  font-family: "Segoe UI", "PingFang SC", sans-serif;
+}
+
+.main-content {
+  padding: 8px 24px 24px 24px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-width: 920px;
+  margin: 0 auto;
+  width: 100%;
+  gap: 14px;
+}
+
+.form-panel {
+  border: 1px solid var(--create-border-outer);
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-header {
+  border-bottom: 1px solid var(--create-border-outer);
+  padding-bottom: 10px;
+}
+
+.game-title {
+  margin: 0;
+  color: var(--create-brass-primary);
+  font-size: 20px;
+}
+
+.game-description {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+.field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field-label {
+  font-size: 13px;
+  color: var(--text-on-dark);
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.section-title {
+  margin: 0;
+  font-size: 15px;
+  color: var(--create-brass-primary);
+}
+
+.param-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.param-item {
+  border: 1px solid var(--create-border-outer);
+  border-radius: 6px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.text-input {
+  padding: 8px 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--text-on-dark);
+  border-radius: 4px;
+  outline: none;
+  width: 100%;
+}
+
+.text-input:focus {
+  border-color: var(--create-brass-primary);
+}
+
+.boolean-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-on-dark);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.btn-cancel {
+  padding: 8px 14px;
+  font-size: 13px;
+  background: transparent;
+  border: 1px solid var(--btn-secondary-border);
+  color: var(--btn-secondary-text);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-cancel:hover {
+  background: var(--hover-lighten);
+}
+
+.btn-confirm {
+  padding: 8px 14px;
+  font-size: 13px;
+  background: var(--create-brass-dark);
+  color: var(--text-on-dark);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-confirm:hover {
+  filter: brightness(1.1);
+}
+
+.btn-confirm:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.state-message {
+  text-align: center;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-muted);
+  border-radius: 8px;
+  padding: 40px 16px;
+}
+
+.state-message.compact {
+  padding: 16px;
+}
+
+.state-error {
+  color: var(--danger);
+  border-color: rgba(255, 77, 79, 0.5);
+  background: var(--danger-light);
+}
+
+@media (max-width: 1023px) {
+  .page-title {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .main-content {
+    padding: 8px 16px 20px 16px;
+  }
+
+  .actions {
+    flex-direction: column-reverse;
+  }
+
+  .btn-cancel,
+  .btn-confirm {
+    width: 100%;
+  }
+}
+</style>

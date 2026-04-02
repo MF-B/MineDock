@@ -1,0 +1,59 @@
+image:
+  name: "itzg/minecraft-server"
+  tag: "latest"
+
+container:
+  ports:
+    - host: 25565
+      container: 25565
+      protocol: "tcp"
+  env:
+    EULA: "TRUE"
+    TYPE: "PAPER"
+  volumes:
+    - name: "server-data"
+      container_path: "/data"
+  resources:
+    memory: "2g"
+    cpu: 2.0
+  health_check:
+    test: ["CMD-SHELL", "mc-health"]
+    interval: "30s"
+    timeout: "10s"
+    retries: 3
+    start_period: "120s"
+
+params:
+  - key: "SERVER_TYPE"
+    label: "服务器类型"
+    description: "选择 Minecraft 服务器内核"
+    type: "select"
+    default: "PAPER"
+    options:
+      - value: "PAPER"
+        label: "Paper"
+      - value: "FABRIC"
+        label: "Fabric"
+      - value: "FORGE"
+        label: "Forge"
+      - value: "VANILLA"
+        label: "Vanilla"
+    env_var: "TYPE"
+  - key: "MC_VERSION"
+    label: "游戏版本"
+    description: "指定 Minecraft 版本号"
+    type: "string"
+    default: "LATEST"
+    env_var: "VERSION"
+  - key: "MAX_PLAYERS"
+    label: "最大玩家数"
+    description: "服务器最大在线人数"
+    type: "number"
+    default: 20
+    env_var: "MAX_PLAYERS"
+  - key: "ONLINE_MODE"
+    label: "正版验证"
+    description: "是否启用 Mojang 正版验证"
+    type: "boolean"
+    default: true
+    env_var: "ONLINE_MODE"

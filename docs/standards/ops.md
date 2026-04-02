@@ -17,7 +17,8 @@
 
 - 后端：
   - `MINEDOCK_DB_PATH`（默认 `data/minedock.db`）
-  - `MINEDOCK_REGISTRY_PATH`（默认 `registry.json`）
+  - `MINEDOCK_GAMES_PATH`（默认 `games.json`）
+  - `MINEDOCK_TEMPLATES_DIR`（默认 `templates`）
 - 前端：
   - `VITE_API_BASE_URL`（默认 `/api`）
 

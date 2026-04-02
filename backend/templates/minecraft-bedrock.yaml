@@ -1,0 +1,47 @@
+image:
+  name: "itzg/minecraft-bedrock-server"
+  tag: "latest"
+
+container:
+  ports:
+    - host: 19132
+      container: 19132
+      protocol: "udp"
+  env:
+    EULA: "TRUE"
+  volumes:
+    - name: "server-data"
+      container_path: "/data"
+  resources:
+    memory: "1g"
+    cpu: 1.0
+
+params:
+  - key: "GAMEMODE"
+    label: "游戏模式"
+    description: "服务器默认游戏模式"
+    type: "select"
+    default: "survival"
+    options:
+      - value: "survival"
+        label: "生存"
+      - value: "creative"
+        label: "创造"
+      - value: "adventure"
+        label: "冒险"
+    env_var: "GAMEMODE"
+  - key: "DIFFICULTY"
+    label: "难度"
+    description: "服务器难度"
+    type: "select"
+    default: "normal"
+    options:
+      - value: "peaceful"
+        label: "和平"
+      - value: "easy"
+        label: "简单"
+      - value: "normal"
+        label: "普通"
+      - value: "hard"
+        label: "困难"
+    env_var: "DIFFICULTY"

@@ -17,13 +17,37 @@ type OutputI18nPayload = {
 
 const backendMessageKeyMap: Record<string, string> = {
   "name is required": "status.emptyName",
-  "image_id is required": "errors.imageIdRequired",
-  "image not found in registry": "errors.imageNotFound",
+  "game_id is required": "errors.gameIdRequired",
+  "game not found": "errors.gameNotFound",
+  "invalid params": "errors.invalidParams",
   "invalid json body": "errors.invalidJsonBody",
   "invalid container id": "errors.invalidContainerId",
   "instance name already exists": "errors.instanceNameExists",
   "instance is running, stop it before delete": "errors.instanceRunning",
 };
+
+function mapBackendMessageToKey(message: string): string | undefined {
+  const normalized = message.trim().toLowerCase();
+  const exact = backendMessageKeyMap[normalized];
+  if (exact) {
+    return exact;
+  }
+
+  if (normalized.includes("invalid params")) {
+    return "errors.invalidParams";
+  }
+  if (normalized.includes("game not found")) {
+    return "errors.gameNotFound";
+  }
+  if (normalized.includes("template not found")) {
+    return "errors.templateNotFound";
+  }
+  if (normalized.includes("invalid template")) {
+    return "errors.templateInvalid";
+  }
+
+  return undefined;
+}
 
 function isLikelyI18nKey(value: string): boolean {
   return /^[a-z][a-z0-9_-]*(?:\.[a-zA-Z0-9_-]+)+$/.test(value);
@@ -68,7 +92,7 @@ export const useContainerStore = defineStore("containers", () => {
   function mapErrorToI18n(error: unknown): OutputI18nPayload {
     if (error instanceof ApiRequestError) {
       if (error.backendMessage) {
-        const mappedKey = backendMessageKeyMap[error.backendMessage.trim().toLowerCase()];
+        const mappedKey = mapBackendMessageToKey(error.backendMessage);
         if (mappedKey) {
           return { key: mappedKey };
         }
@@ -152,9 +176,13 @@ export const useContainerStore = defineStore("containers", () => {
   }
 
   // 创建实例后立即刷新列表，避免视图层维护后端数据副本。
-  async function create(name: string, imageId: string): Promise<boolean> {
+  async function create(
+    name: string,
+    gameId: string,
+    params: Record<string, string> = {},
+  ): Promise<boolean> {
     try {
-      const data = await apiCreate(name, imageId);
+      const data = await apiCreate(name, gameId, params);
       print(data);
       await fetchInstances();
       return true;
