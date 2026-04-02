@@ -11,6 +11,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 
 	"minedock/backend/internal/model"
 )
@@ -78,16 +79,27 @@ func (s *DockerService) CreateInstance(ctx context.Context, name, gameID string,
 		return "", err
 	}
 
+	exposedPorts, portBindings := buildPortBindings(tpl.Container.Ports)
+	cmd := []string(nil)
+	if len(tpl.Container.Command) > 0 {
+		cmd = append(cmd, tpl.Container.Command...)
+	}
+	hostConfig := &container.HostConfig{
+		PortBindings: portBindings,
+		Binds:        buildVolumeBinds(name, tpl.Container.Volumes),
+	}
+
 	resp, err := s.cli.ContainerCreate(ctx, &container.Config{
-		Image: imageRef,
-		Cmd:   []string{"sleep", "3600"},
-		Env:   mapToDockerEnv(env),
+		Image:        imageRef,
+		Cmd:          cmd,
+		Env:          mapToDockerEnv(env),
+		ExposedPorts: exposedPorts,
 		Labels: map[string]string{
 			managedLabelKey: managedLabelValue,
 			nameLabelKey:    name,
 			gameIDLabelKey:  game.ID,
 		},
-	}, nil, nil, nil, "")
+	}, hostConfig, nil, nil, "")
 	if err != nil {
 		return "", fmt.Errorf("create container: %w", err)
 	}
@@ -222,6 +234,103 @@ func mapToDockerEnv(m map[string]string) []string {
 		env = append(env, fmt.Sprintf("%s=%s", key, value))
 	}
 	return env
+}
+
+func buildPortBindings(ports []model.PortMapping) (nat.PortSet, nat.PortMap) {
+	if len(ports) == 0 {
+		return nil, nil
+	}
+
+	exposedPorts := make(nat.PortSet, len(ports))
+	portBindings := make(nat.PortMap, len(ports))
+
+	for _, p := range ports {
+		protocol := strings.ToLower(strings.TrimSpace(p.Protocol))
+		if protocol == "" {
+			protocol = "tcp"
+		}
+
+		containerPort, err := nat.NewPort(protocol, strconv.Itoa(p.Container))
+		if err != nil {
+			continue
+		}
+
+		exposedPorts[containerPort] = struct{}{}
+		portBindings[containerPort] = append(portBindings[containerPort], nat.PortBinding{
+			HostPort: strconv.Itoa(p.Host),
+		})
+	}
+
+	if len(exposedPorts) == 0 {
+		return nil, nil
+	}
+
+	return exposedPorts, portBindings
+}
+
+func buildVolumeBinds(instanceName string, volumes []model.VolumeMount) []string {
+	if len(volumes) == 0 {
+		return nil
+	}
+
+	instanceToken := sanitizeVolumeNameToken(instanceName)
+	binds := make([]string, 0, len(volumes))
+	for _, v := range volumes {
+		volumeToken := sanitizeVolumeNameToken(v.Name)
+		dockerVolName := fmt.Sprintf("minedock-%s-%s", instanceToken, volumeToken)
+		bind := fmt.Sprintf("%s:%s", dockerVolName, strings.TrimSpace(v.ContainerPath))
+		if v.ReadOnly {
+			bind += ":ro"
+		}
+		binds = append(binds, bind)
+	}
+
+	return binds
+}
+
+func sanitizeVolumeNameToken(raw string) string {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	if s == "" {
+		return "default"
+	}
+
+	var b strings.Builder
+	b.Grow(len(s))
+	lastSeparator := false
+
+	for _, r := range s {
+		isAlnum := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if isAlnum {
+			b.WriteRune(r)
+			lastSeparator = false
+			continue
+		}
+
+		if r == '-' || r == '_' || r == '.' {
+			if !lastSeparator {
+				b.WriteRune(r)
+				lastSeparator = true
+			}
+			continue
+		}
+
+		if !lastSeparator {
+			b.WriteByte('-')
+			lastSeparator = true
+		}
+	}
+
+	token := strings.Trim(b.String(), "-_.")
+	if token == "" {
+		return "default"
+	}
+
+	first := token[0]
+	if !((first >= 'a' && first <= 'z') || (first >= '0' && first <= '9')) {
+		token = "v-" + token
+	}
+
+	return token
 }
 
 // StartInstance 启动托管容器并更新持久化状态。

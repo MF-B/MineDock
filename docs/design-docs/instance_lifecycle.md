@@ -39,6 +39,12 @@ stateDiagram-v2
     Stopped --> [*]: Delete
 ```
 
+## 创建配置注入
+
+- 端口映射来源：模板 `container.ports`，创建容器时写入 Docker `ExposedPorts` 与 `PortBindings`。
+- 卷挂载来源：模板 `container.volumes`，卷名规则为 `minedock-{instanceName}-{volumeName}`。
+- 启动命令来源：若模板配置了 `container.command` 则覆盖镜像命令；否则使用镜像默认 `ENTRYPOINT/CMD`。
+
 ## 一致性策略
 
 - 事实来源：Docker Daemon。
@@ -51,3 +57,4 @@ stateDiagram-v2
 - 创建流程：若数据库保存失败，立即强制删除刚创建容器。
 - 启停流程：Docker 操作成功但 DB 更新失败时，接口返回错误；后续列表刷新会将状态重新收敛。
 - 删除流程：Docker 删除成功后若 DB 删除失败，后续列表会因 Docker 不存在而清理状态。
+- 数据卷策略：删除实例不会自动清理 Docker 卷，卷数据默认保留，需手动回收或后续能力支持。
