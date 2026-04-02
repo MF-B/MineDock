@@ -93,10 +93,14 @@
 
 ### POST /api/instances
 
-- 说明：创建一个新容器（初始为 Stopped）
+- 说明：创建一个新容器（初始为 Stopped），并应用模板中的端口映射与卷挂载配置
 - 状态码：
   - 成功：`200`
-  - 失败：`400`（JSON非法/空名称/缺失 game_id/game_id 不合法/params 非法）、`409`（名称冲突）、`500`（模板不存在或模板非法）
+  - 失败：`400`（JSON非法/空名称/缺失 game_id/game_id 不合法/params 非法）、`409`（名称冲突）、`500`（模板不存在或模板非法/容器创建失败）
+- 行为说明：
+  - 端口映射来源：模板 `container.ports`
+  - 卷挂载来源：模板 `container.volumes`，卷名规则为 `minedock-{instanceName}-{volumeName}`
+  - 若宿主机端口冲突，返回 Docker 原生错误并映射为 `500`
 - 请求参数：
 
 ```json
