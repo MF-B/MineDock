@@ -7,6 +7,17 @@
     "toggleTitle": "开启/关闭",
     "confirmDelete": "确认彻底删除该容器吗？"
   },
+  "console": {
+    "back": "返回列表",
+    "loading": "正在加载容器状态...",
+    "instanceNotFound": "容器不存在或已被删除。",
+    "instanceNotRunning": "容器未运行，请先启动后再连接控制台。",
+    "connected": "控制台已连接",
+    "disconnectedLabel": "控制台未连接",
+    "connectionError": "控制台连接失败，请刷新页面重试。",
+    "statusUnknown": "状态未知",
+    "mountMissing": "终端尚未准备好，请稍后重试。"
+  },
   "createModal": {
     "title": "新建容器",
     "placeholder": "请输入新容器名称...",

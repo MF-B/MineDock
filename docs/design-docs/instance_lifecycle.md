@@ -52,6 +52,14 @@ stateDiagram-v2
 - 收敛机制（主路径）：监听 Docker Events，在容器状态变化后通过 WebSocket 推送最新实例快照。
 - 收敛机制（降级路径）：`ListInstances` 按需对账 Docker -> SQLite；当前端 WebSocket 不可用时回退到轮询接口。
 
+## 控制台交互
+
+- 路由：前端通过 `/instances/:id` 进入容器详情页，页面建立 `GET /api/ws/console/:id` WebSocket。
+- 输入链路：浏览器 WebSocket 输入 -> 后端 ConsoleHandler -> Docker Attach stdin。
+- 输出链路：Docker Attach stdout/stderr -> 后端 ConsoleHandler -> 浏览器 WebSocket -> xterm.js。
+- 运行态约束：仅 Running 容器允许 Attach；容器停止后连接会断开，页面提示用户重新启动后再连接。
+- TTY 差异：TTY 容器输出直接透传；非 TTY 容器需先做 stdout/stderr 解复用再推送。
+
 ## 失败与回滚策略
 
 - 创建流程：若数据库保存失败，立即强制删除刚创建容器。

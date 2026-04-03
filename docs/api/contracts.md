@@ -175,3 +175,18 @@
 
 - 触发时机：任一托管容器状态发生变化（`start` / `stop` / `die` / `destroy` / `kill`）
 - 降级方案：客户端连接失败时应回退到轮询 `GET /api/instances`
+
+### GET /api/ws/console/:id (WebSocket)
+
+- 说明：建立 WebSocket 连接，双向桥接容器主进程的 stdin/stdout/stderr
+- 协议：WebSocket（HTTP Upgrade）
+- 前置条件：容器必须处于 Running 状态
+- 路径参数：`id`（容器 ID）
+- 数据流向：
+  - 服务端 -> 客户端：容器 stdout/stderr 输出（Binary 帧）
+  - 客户端 -> 服务端：用户输入命令（Text/Binary 帧，原样写入容器 stdin）
+- TTY 自适应：
+  - TTY 容器：直接转发输出流
+  - 非 TTY 容器：服务端使用 Docker 多路复用解复用后再转发
+- 连接关闭时机：客户端断开、容器退出、服务端关闭连接
+- 失败行为：容器不存在或未运行时，服务端在升级后主动关闭连接并返回原因

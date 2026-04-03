@@ -12,6 +12,11 @@ const wsHost = typeof window === "undefined" ? resolvedBaseURL.host : window.loc
 const wsPath = resolvedBaseURL.pathname.replace(/\/+$/, "");
 export const WS_BASE_URL = `${wsProtocol}//${wsHost}${wsPath}`;
 
+// consoleWsUrl 构造容器控制台 WebSocket 地址。
+export function consoleWsUrl(containerId: string): string {
+  return `${WS_BASE_URL}/ws/console/${encodeURIComponent(containerId)}`;
+}
+
 type JsonObject = Record<string, unknown>;
 
 interface RequestOptions extends Omit<RequestInit, "headers" | "body"> {
