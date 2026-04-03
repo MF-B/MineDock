@@ -7,6 +7,17 @@
     "toggleTitle": "Start/Stop",
     "confirmDelete": "Are you sure you want to permanently delete this container?"
   },
+  "console": {
+    "back": "Back to List",
+    "loading": "Loading container state...",
+    "instanceNotFound": "Container not found or already removed.",
+    "instanceNotRunning": "Container is not running. Start it before opening the console.",
+    "connected": "Console connected",
+    "disconnectedLabel": "Console disconnected",
+    "connectionError": "Failed to connect to console. Refresh and try again.",
+    "statusUnknown": "Unknown",
+    "mountMissing": "Terminal is not ready yet. Please try again."
+  },
   "createModal": {
     "title": "New Container",
     "placeholder": "Enter container name...",

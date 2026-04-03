@@ -44,6 +44,10 @@ function goToTemplateMarket(): void {
   void router.push({ name: "ImageRegistry" });
 }
 
+function openInstanceDetail(containerId: string): void {
+  void router.push({ name: "InstanceDetail", params: { id: containerId } });
+}
+
 // 删除属于破坏性操作，执行前必须二次确认。
 async function handleDelete(containerId: string): Promise<void> {
   if (!confirm(t("containers.confirmDelete"))) return;
@@ -74,7 +78,6 @@ async function handleToggle(instance: {
 </script>
 
 <template>
-  <!-- 顶部栏 -->
   <header class="page-header">
     <h1 class="page-title">{{ $t("containers.title") }}</h1>
   </header>
@@ -92,13 +95,18 @@ async function handleToggle(instance: {
         {{ $t("containers.emptyState") }}
       </div>
 
-      <div v-for="item in store.instances" :key="item.container_id" class="card">
+      <div
+        v-for="item in store.instances"
+        :key="item.container_id"
+        class="card"
+        @click="openInstanceDetail(item.container_id)"
+      >
         <!-- 左侧：容器名称 -->
         <div class="card-left">
           <span class="card-name">{{ item.name }}</span>
         </div>
         <!-- 右侧：控制按钮（拉杆与删除） -->
-        <div class="card-right">
+        <div class="card-right" @click.stop>
           <label class="switch" :title="$t('containers.toggleTitle')">
             <input
               type="checkbox"
@@ -127,6 +135,13 @@ async function handleToggle(instance: {
   justify-content: center;
   flex-shrink: 0;
   position: relative;
+  padding: 0 80px 0 24px; /* 为右侧透明的全局 TopBar 预留 80px 的事件不遮挡空间，左层 24px */
+}
+
+@media (max-width: 767px) {
+  .page-header {
+    padding: 0 80px 0 52px; /* 移动端左侧多让出 52px 的空间给绝对定位的 Hamburger，防止标题偏移碰撞 */
+  }
 }
 
 .page-title {
@@ -138,7 +153,6 @@ async function handleToggle(instance: {
   font-family: "Segoe UI", "PingFang SC", sans-serif;
 }
 
-/* 内容区操作栏与新建按钮 */
 .content-actions {
   display: flex;
   justify-content: flex-end;
@@ -161,7 +175,7 @@ async function handleToggle(instance: {
 }
 
 .main-content {
-  padding: 8px 24px 24px 24px;
+  padding: 0 24px 24px 24px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -218,6 +232,10 @@ async function handleToggle(instance: {
 
 .card:hover {
   filter: brightness(0.96);
+}
+
+.card {
+  cursor: pointer;
 }
 
 .card-left {

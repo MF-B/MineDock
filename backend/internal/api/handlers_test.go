@@ -66,7 +66,7 @@ func newTestRouter(m *mockService) http.Handler {
 			return model.GameTemplate{}, model.ErrGameNotFound
 		},
 	})
-	return NewRouter(h, gh, nil)
+	return NewRouter(h, gh, nil, nil)
 }
 
 // --- GET /api/instances 场景 ---
@@ -123,7 +123,7 @@ func TestGetGames_Success(t *testing.T) {
 			return model.GameTemplate{}, model.ErrGameNotFound
 		},
 	})
-	router := NewRouter(h, gh, nil)
+	router := NewRouter(h, gh, nil, nil)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/games", nil)
@@ -155,7 +155,7 @@ func TestGetGameTemplate_Success(t *testing.T) {
 			return model.GameTemplate{Image: model.TemplateImage{Name: "itzg/minecraft-server", Tag: "latest"}}, nil
 		},
 	})
-	router := NewRouter(h, gh, nil)
+	router := NewRouter(h, gh, nil, nil)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/games/minecraft-java/template", nil)
@@ -184,7 +184,7 @@ func TestGetGameTemplate_NotFound(t *testing.T) {
 			return model.GameTemplate{}, model.ErrGameNotFound
 		},
 	})
-	router := NewRouter(h, gh, nil)
+	router := NewRouter(h, gh, nil, nil)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/games/not-exists/template", nil)

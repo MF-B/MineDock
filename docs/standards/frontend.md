@@ -70,6 +70,7 @@
 - 当前路由：
   - `/` 映射容器列表页（`ContainerList.vue`）
   - `/registry` 映射游戏模板市场页（`ImageRegistry.vue`）
+  - `/instances/:id` 映射容器详情页（`InstanceDetail.vue`）
 - 当前版本无登录鉴权。
 - 新增页面时要求：
   - 在 `router/index.ts` 显式注册路由
