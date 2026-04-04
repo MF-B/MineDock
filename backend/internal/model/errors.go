@@ -19,3 +19,6 @@ var ErrTemplateInvalid = errors.New("invalid template")
 
 // ErrInvalidParams 表示传入了不受模板定义约束的参数。
 var ErrInvalidParams = errors.New("invalid params")
+
+// ErrContainerNotStopped 表示容器必须先停止，才能执行配置更新。
+var ErrContainerNotStopped = errors.New("container must be stopped to update config")

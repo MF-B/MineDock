@@ -31,7 +31,7 @@ func TestSaveAndGet(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	inst := model.Instance{ContainerID: "c1", Name: "server-1", Status: "Stopped"}
+	inst := model.Instance{ContainerID: "c1", Name: "server-1", GameID: "minecraft-java", Status: "Stopped"}
 	if err := s.Save(ctx, inst); err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestSaveAndGet(t *testing.T) {
 	if !ok {
 		t.Fatal("expected instance to exist")
 	}
-	if got.ContainerID != "c1" || got.Name != "server-1" || got.Status != "Stopped" {
+	if got.ContainerID != "c1" || got.Name != "server-1" || got.GameID != "minecraft-java" || got.Status != "Stopped" {
 		t.Fatalf("unexpected instance: %+v", got)
 	}
 }
@@ -52,11 +52,12 @@ func TestSave_Upsert(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	inst := model.Instance{ContainerID: "c1", Name: "server-1", Status: "Stopped"}
+	inst := model.Instance{ContainerID: "c1", Name: "server-1", GameID: "minecraft-java", Status: "Stopped"}
 	if err := s.Save(ctx, inst); err != nil {
 		t.Fatalf("first save: %v", err)
 	}
 
+	inst.GameID = "minecraft-bedrock"
 	inst.Status = "Running"
 	if err := s.Save(ctx, inst); err != nil {
 		t.Fatalf("upsert save: %v", err)
@@ -69,17 +70,20 @@ func TestSave_Upsert(t *testing.T) {
 	if got.Status != "Running" {
 		t.Fatalf("expected Running, got %s", got.Status)
 	}
+	if got.GameID != "minecraft-bedrock" {
+		t.Fatalf("expected minecraft-bedrock, got %s", got.GameID)
+	}
 }
 
 func TestSave_DuplicateName(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	if err := s.Save(ctx, model.Instance{ContainerID: "c1", Name: "dup", Status: "Stopped"}); err != nil {
+	if err := s.Save(ctx, model.Instance{ContainerID: "c1", Name: "dup", GameID: "minecraft-java", Status: "Stopped"}); err != nil {
 		t.Fatalf("first save: %v", err)
 	}
 
-	err := s.Save(ctx, model.Instance{ContainerID: "c2", Name: "dup", Status: "Stopped"})
+	err := s.Save(ctx, model.Instance{ContainerID: "c2", Name: "dup", GameID: "minecraft-java", Status: "Stopped"})
 	if !errors.Is(err, model.ErrNameExists) {
 		t.Fatalf("expected ErrNameExists, got %v", err)
 	}
@@ -102,7 +106,7 @@ func TestDelete(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	inst := model.Instance{ContainerID: "c1", Name: "server-1", Status: "Stopped"}
+	inst := model.Instance{ContainerID: "c1", Name: "server-1", GameID: "minecraft-java", Status: "Stopped"}
 	if err := s.Save(ctx, inst); err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -135,9 +139,9 @@ func TestList(t *testing.T) {
 	ctx := context.Background()
 
 	instances := []model.Instance{
-		{ContainerID: "c1", Name: "alpha", Status: "Running"},
-		{ContainerID: "c2", Name: "beta", Status: "Stopped"},
-		{ContainerID: "c3", Name: "gamma", Status: "Running"},
+		{ContainerID: "c1", Name: "alpha", GameID: "minecraft-java", Status: "Running"},
+		{ContainerID: "c2", Name: "beta", GameID: "minecraft-bedrock", Status: "Stopped"},
+		{ContainerID: "c3", Name: "gamma", GameID: "terraria", Status: "Running"},
 	}
 	for _, inst := range instances {
 		if err := s.Save(ctx, inst); err != nil {

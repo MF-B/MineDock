@@ -58,7 +58,8 @@ func main() {
 	wsHandler := api.NewWsHandler(hub)
 	consoleSvc := service.NewConsoleService(cli)
 	consoleHandler := api.NewConsoleHandler(consoleSvc)
-	router := api.NewRouter(h, gameHandler, wsHandler, consoleHandler)
+	configHandler := api.NewConfigHandler(svc)
+	router := api.NewRouter(h, gameHandler, wsHandler, consoleHandler, configHandler)
 
 	addr := ":8080"
 	log.Printf("MineDock backend listening on %s", addr)

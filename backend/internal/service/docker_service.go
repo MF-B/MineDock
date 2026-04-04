@@ -10,8 +10,9 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/client"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"minedock/backend/internal/model"
 )
@@ -22,6 +23,25 @@ const (
 	nameLabelKey      = "minedock.name"
 	gameIDLabelKey    = "minedock.game_id"
 )
+
+// dockerClient 定义 DockerService 依赖的 Docker API。
+type dockerClient interface {
+	ContainerCreate(
+		ctx context.Context,
+		config *container.Config,
+		hostConfig *container.HostConfig,
+		networkingConfig *network.NetworkingConfig,
+		platform *ocispec.Platform,
+		containerName string,
+	) (container.CreateResponse, error)
+	ContainerInspect(ctx context.Context, containerID string) (container.InspectResponse, error)
+	ContainerRemove(ctx context.Context, containerID string, options container.RemoveOptions) error
+	ContainerStart(ctx context.Context, containerID string, options container.StartOptions) error
+	ContainerStop(ctx context.Context, containerID string, options container.StopOptions) error
+	ContainerList(ctx context.Context, options container.ListOptions) ([]container.Summary, error)
+	ImageList(ctx context.Context, options image.ListOptions) ([]image.Summary, error)
+	ImagePull(ctx context.Context, ref string, options image.PullOptions) (io.ReadCloser, error)
+}
 
 // InstanceStore 定义 DockerService 依赖的持久化操作。
 type InstanceStore interface {
@@ -36,21 +56,34 @@ type GameRegistry interface {
 	GetTemplate(ctx context.Context, id string) (model.GameTemplate, error)
 }
 
+// InstanceConfig 描述容器当前生效的可编辑配置。
+type InstanceConfig struct {
+	GameID string              `json:"game_id"`
+	Status string              `json:"status"`
+	Ports  []model.PortMapping `json:"ports"`
+	Params map[string]string   `json:"params"`
+}
+
 // DockerService 封装容器管理相关业务逻辑。
 type DockerService struct {
-	cli      *client.Client
+	cli      dockerClient
 	store    InstanceStore
 	registry GameRegistry
 }
 
 // NewDockerService 使用依赖项创建 DockerService。
-func NewDockerService(cli *client.Client, s InstanceStore, registry GameRegistry) *DockerService {
+func NewDockerService(cli dockerClient, s InstanceStore, registry GameRegistry) *DockerService {
 	return &DockerService{cli: cli, store: s, registry: registry}
 }
 
 // CreateInstance 创建托管容器并持久化实例元数据。
 // TODO: 让 Docker 创建与 SQLite 保存具备原子性。
-func (s *DockerService) CreateInstance(ctx context.Context, name, gameID string, params map[string]string) (string, error) {
+func (s *DockerService) CreateInstance(
+	ctx context.Context,
+	name, gameID string,
+	params map[string]string,
+	ports []model.PortMapping,
+) (string, error) {
 	if s.registry == nil {
 		return "", fmt.Errorf("game registry is not configured")
 	}
@@ -79,7 +112,12 @@ func (s *DockerService) CreateInstance(ctx context.Context, name, gameID string,
 		return "", err
 	}
 
-	exposedPorts, portBindings := buildPortBindings(tpl.Container.Ports)
+	resolvedPorts, err := resolveConfigPorts(tpl.Container.Ports, nil, ports)
+	if err != nil {
+		return "", err
+	}
+
+	exposedPorts, portBindings := buildPortBindings(resolvedPorts)
 	cmd := []string(nil)
 	if len(tpl.Container.Command) > 0 {
 		cmd = append(cmd, tpl.Container.Command...)
@@ -110,11 +148,168 @@ func (s *DockerService) CreateInstance(ctx context.Context, name, gameID string,
 		return "", fmt.Errorf("create container: %w", err)
 	}
 
-	inst := model.Instance{ContainerID: resp.ID, Name: name, Status: "Stopped"}
+	inst := model.Instance{ContainerID: resp.ID, Name: name, GameID: game.ID, Status: "Stopped"}
 	if err := s.store.Save(ctx, inst); err != nil {
 		// 说明：请求上下文取消时，清理逻辑会使用独立上下文做尽力回收。
 		_ = s.cli.ContainerRemove(context.Background(), resp.ID, container.RemoveOptions{Force: true})
 		return "", fmt.Errorf("save instance record: %w", err)
+	}
+
+	return resp.ID, nil
+}
+
+// GetInstanceConfig 读取容器当前生效的用户可调参数。
+func (s *DockerService) GetInstanceConfig(ctx context.Context, containerID string) (*InstanceConfig, error) {
+	if s.registry == nil {
+		return nil, fmt.Errorf("game registry is not configured")
+	}
+
+	inspect, err := s.cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return nil, fmt.Errorf("inspect container: %w", err)
+	}
+	if inspect.Config == nil {
+		return nil, fmt.Errorf("inspect container config is empty")
+	}
+
+	gameID := strings.TrimSpace(inspect.Config.Labels[gameIDLabelKey])
+	if gameID == "" {
+		return nil, fmt.Errorf("container %q is missing %s label", containerID, gameIDLabelKey)
+	}
+
+	tpl, err := s.registry.GetTemplate(ctx, gameID)
+	if err != nil {
+		return nil, err
+	}
+
+	ports, err := resolveConfigPorts(tpl.Container.Ports, inspect.HostConfig, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	containerEnv := dockerEnvToMap(inspect.Config.Env)
+	params := make(map[string]string, len(tpl.Params))
+	for _, param := range tpl.Params {
+		envKey := strings.TrimSpace(param.EnvVar)
+		if envKey == "" {
+			envKey = param.Key
+		}
+
+		value, ok := containerEnv[envKey]
+		if !ok {
+			if defaultValue, hasDefault := stringifyTemplateDefault(param); hasDefault {
+				value = defaultValue
+			}
+		}
+
+		params[param.Key] = value
+	}
+
+	return &InstanceConfig{
+		GameID: gameID,
+		Status: instanceStatusFromState(inspect.State),
+		Ports:  ports,
+		Params: params,
+	}, nil
+}
+
+// UpdateInstanceConfig 通过重建容器应用新的用户参数。
+func (s *DockerService) UpdateInstanceConfig(
+	ctx context.Context,
+	containerID string,
+	newParams map[string]string,
+	newPorts []model.PortMapping,
+) (string, error) {
+	if s.registry == nil {
+		return "", fmt.Errorf("game registry is not configured")
+	}
+
+	inspect, err := s.cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return "", fmt.Errorf("inspect container: %w", err)
+	}
+	if inspect.Config == nil {
+		return "", fmt.Errorf("inspect container config is empty")
+	}
+	if inspect.State != nil && inspect.State.Running {
+		return "", model.ErrContainerNotStopped
+	}
+
+	gameID := strings.TrimSpace(inspect.Config.Labels[gameIDLabelKey])
+	if gameID == "" {
+		return "", fmt.Errorf("container %q is missing %s label", containerID, gameIDLabelKey)
+	}
+
+	tpl, err := s.registry.GetTemplate(ctx, gameID)
+	if err != nil {
+		return "", err
+	}
+
+	env, err := mergeTemplateEnv(tpl, newParams)
+	if err != nil {
+		return "", err
+	}
+
+	ports, err := resolveConfigPorts(tpl.Container.Ports, inspect.HostConfig, newPorts)
+	if err != nil {
+		return "", err
+	}
+
+	exposedPorts, portBindings := buildPortBindings(ports)
+
+	containerName := strings.TrimPrefix(inspect.Name, "/")
+	instanceName := strings.TrimSpace(inspect.Config.Labels[nameLabelKey])
+	if instanceName == "" {
+		instanceName = containerName
+	}
+	if instanceName == "" {
+		instanceName = containerID
+	}
+
+	hostConfig := &container.HostConfig{}
+	if inspect.HostConfig != nil {
+		hostConfig.Binds = append([]string(nil), inspect.HostConfig.Binds...)
+	}
+	hostConfig.PortBindings = portBindings
+
+	labels := copyStringMap(inspect.Config.Labels)
+	labels[managedLabelKey] = managedLabelValue
+	labels[nameLabelKey] = instanceName
+	labels[gameIDLabelKey] = gameID
+
+	if err := s.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: false}); err != nil {
+		return "", fmt.Errorf("remove old container: %w", err)
+	}
+
+	resp, err := s.cli.ContainerCreate(ctx, &container.Config{
+		Image:        inspect.Config.Image,
+		Cmd:          append([]string(nil), inspect.Config.Cmd...),
+		Env:          mapToDockerEnv(env),
+		ExposedPorts: exposedPorts,
+		Tty:          inspect.Config.Tty,
+		AttachStdin:  inspect.Config.AttachStdin,
+		AttachStdout: inspect.Config.AttachStdout,
+		AttachStderr: inspect.Config.AttachStderr,
+		OpenStdin:    inspect.Config.OpenStdin,
+		StdinOnce:    inspect.Config.StdinOnce,
+		Labels:       labels,
+	}, hostConfig, nil, nil, containerName)
+	if err != nil {
+		return "", fmt.Errorf("create replacement container: %w", err)
+	}
+
+	newInst := model.Instance{
+		ContainerID: resp.ID,
+		Name:        instanceName,
+		GameID:      gameID,
+		Status:      "Stopped",
+	}
+
+	if err := s.store.Delete(ctx, containerID); err != nil {
+		return "", fmt.Errorf("delete old instance record: %w", err)
+	}
+	if err := s.store.Save(ctx, newInst); err != nil {
+		return "", fmt.Errorf("save new instance record: %w", err)
 	}
 
 	return resp.ID, nil
@@ -393,6 +588,7 @@ func (s *DockerService) ListInstances(ctx context.Context) ([]model.Instance, er
 		if strings.TrimSpace(name) == "" && len(c.Names) > 0 {
 			name = strings.TrimPrefix(c.Names[0], "/")
 		}
+		gameID := strings.TrimSpace(c.Labels[gameIDLabelKey])
 		status := "Stopped"
 		if strings.EqualFold(c.State, "running") {
 			status = "Running"
@@ -400,6 +596,7 @@ func (s *DockerService) ListInstances(ctx context.Context) ([]model.Instance, er
 		inst := model.Instance{
 			ContainerID: c.ID,
 			Name:        name,
+			GameID:      gameID,
 			Status:      status,
 		}
 		// 说明：当前 Save 为尽力而为，避免影响列表返回。
@@ -438,7 +635,7 @@ func (s *DockerService) readInstance(ctx context.Context, containerID string, fa
 	if err != nil {
 		return model.Instance{}, fmt.Errorf("read instance: %w", err)
 	}
-	if ok {
+	if ok && strings.TrimSpace(inst.GameID) != "" {
 		// 说明：命中存储后仍会应用调用方传入的兜底状态。
 		inst.Status = fallbackStatus
 		return inst, nil
@@ -450,11 +647,16 @@ func (s *DockerService) readInstance(ctx context.Context, containerID string, fa
 	}
 
 	name := ""
+	gameID := ""
 	if inspect.Config != nil && inspect.Config.Labels != nil {
 		name = strings.TrimSpace(inspect.Config.Labels[nameLabelKey])
+		gameID = strings.TrimSpace(inspect.Config.Labels[gameIDLabelKey])
 	}
 	if name == "" {
 		name = strings.TrimPrefix(inspect.Name, "/")
+	}
+	if gameID == "" && ok {
+		gameID = strings.TrimSpace(inst.GameID)
 	}
 
 	status := fallbackStatus
@@ -467,7 +669,7 @@ func (s *DockerService) readInstance(ctx context.Context, containerID string, fa
 		}
 	}
 
-	return model.Instance{ContainerID: containerID, Name: name, Status: status}, nil
+	return model.Instance{ContainerID: containerID, Name: name, GameID: gameID, Status: status}, nil
 }
 
 // ensureImage 确保本地存在目标镜像，缺失时自动拉取。
@@ -492,4 +694,129 @@ func (s *DockerService) ensureImage(ctx context.Context, imageName string) error
 	defer rc.Close()
 	_, _ = io.Copy(io.Discard, rc)
 	return nil
+}
+
+func dockerEnvToMap(env []string) map[string]string {
+	out := make(map[string]string, len(env))
+	for _, item := range env {
+		key, value, ok := strings.Cut(item, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		out[key] = value
+	}
+	return out
+}
+
+func instanceStatusFromState(state *container.State) string {
+	if state != nil && state.Running {
+		return "Running"
+	}
+	return "Stopped"
+}
+
+func copyStringMap(in map[string]string) map[string]string {
+	out := make(map[string]string, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func resolveConfigPorts(
+	templatePorts []model.PortMapping,
+	hostConfig *container.HostConfig,
+	requestedPorts []model.PortMapping,
+) ([]model.PortMapping, error) {
+	if len(templatePorts) == 0 {
+		return []model.PortMapping{}, nil
+	}
+
+	currentHosts := mapCurrentHostPorts(nil)
+	if hostConfig != nil {
+		currentHosts = mapCurrentHostPorts(hostConfig.PortBindings)
+	}
+
+	requestedHosts := make(map[string]int, len(requestedPorts))
+	for _, p := range requestedPorts {
+		if p.Container <= 0 || p.Host <= 0 {
+			return nil, fmt.Errorf("invalid port mapping: %w", model.ErrInvalidParams)
+		}
+		protocol := normalizePortProtocol(p.Protocol)
+		key := portConfigKey(p.Container, protocol)
+		if _, exists := requestedHosts[key]; exists {
+			return nil, fmt.Errorf("duplicate port mapping %q: %w", key, model.ErrInvalidParams)
+		}
+		requestedHosts[key] = p.Host
+	}
+
+	resolved := make([]model.PortMapping, 0, len(templatePorts))
+	for _, p := range templatePorts {
+		if p.Container <= 0 || p.Host <= 0 {
+			return nil, fmt.Errorf("template port is invalid: %w", model.ErrTemplateInvalid)
+		}
+
+		protocol := normalizePortProtocol(p.Protocol)
+		key := portConfigKey(p.Container, protocol)
+
+		host := p.Host
+		if currentHost, ok := currentHosts[key]; ok {
+			host = currentHost
+		}
+		if requestedHost, ok := requestedHosts[key]; ok {
+			host = requestedHost
+			delete(requestedHosts, key)
+		}
+
+		resolved = append(resolved, model.PortMapping{
+			Host:      host,
+			Container: p.Container,
+			Protocol:  protocol,
+		})
+	}
+
+	if len(requestedHosts) > 0 {
+		return nil, fmt.Errorf("unknown port mapping: %w", model.ErrInvalidParams)
+	}
+
+	return resolved, nil
+}
+
+func mapCurrentHostPorts(portBindings nat.PortMap) map[string]int {
+	out := make(map[string]int, len(portBindings))
+	for containerPort, bindings := range portBindings {
+		if len(bindings) == 0 {
+			continue
+		}
+
+		hostPort, err := strconv.Atoi(strings.TrimSpace(bindings[0].HostPort))
+		if err != nil || hostPort <= 0 {
+			continue
+		}
+
+		containerValue, err := strconv.Atoi(containerPort.Port())
+		if err != nil || containerValue <= 0 {
+			continue
+		}
+
+		key := portConfigKey(containerValue, normalizePortProtocol(containerPort.Proto()))
+		out[key] = hostPort
+	}
+	return out
+}
+
+func normalizePortProtocol(protocol string) string {
+	normalized := strings.ToLower(strings.TrimSpace(protocol))
+	if normalized == "" {
+		return "tcp"
+	}
+	return normalized
+}
+
+func portConfigKey(containerPort int, protocol string) string {
+	return fmt.Sprintf("%d/%s", containerPort, normalizePortProtocol(protocol))
 }

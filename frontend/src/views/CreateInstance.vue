@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import type { GameTemplate, TemplateParam } from "../api/index";
+import type { GameTemplate, PortMapping, TemplateParam } from "../api/index";
 import { useGameStore } from "../stores/games";
 import { useContainerStore } from "../stores/containers";
 
@@ -17,6 +17,7 @@ const creating = ref(false);
 const currentGameID = ref("");
 const containerName = ref("");
 const pageErrorKey = ref("");
+const ports = ref<PortMapping[]>([]);
 const paramValues = ref<Record<string, string>>({});
 
 const currentGame = computed(() => {
@@ -52,6 +53,7 @@ async function initializeForRoute(): Promise<void> {
   loading.value = true;
   pageErrorKey.value = "";
   containerName.value = "";
+  ports.value = [];
   paramValues.value = {};
 
   const gameID = parseRouteGameID(route.params.gameId);
@@ -90,9 +92,17 @@ async function initializeForRoute(): Promise<void> {
 function initParamValuesFromTemplate(template: GameTemplate | null): void {
   const next: Record<string, string> = {};
   if (template) {
+    ports.value = template.container.ports.map((port) => ({
+      host: port.host,
+      container: port.container,
+      protocol: port.protocol,
+    }));
+
     for (const param of template.params) {
       next[param.key] = getDefaultParamValue(param);
     }
+  } else {
+    ports.value = [];
   }
   paramValues.value = next;
 }
@@ -135,6 +145,14 @@ function getCreateParamsPayload(): Record<string, string> {
   return payload;
 }
 
+function getCreatePortsPayload(): PortMapping[] {
+  return ports.value.map((port) => ({
+    host: Number(port.host),
+    container: Number(port.container),
+    protocol: port.protocol,
+  }));
+}
+
 function cancelCreate(): void {
   void router.push({ name: "ImageRegistry" });
 }
@@ -156,7 +174,12 @@ async function handleCreate(): Promise<void> {
   creating.value = true;
   containerStore.print(t("status.creating"));
 
-  const success = await containerStore.create(name, gameID, getCreateParamsPayload());
+  const success = await containerStore.create(
+    name,
+    gameID,
+    getCreateParamsPayload(),
+    getCreatePortsPayload(),
+  );
   creating.value = false;
   if (!success) {
     pageErrorKey.value = containerStore.outputI18n?.key ?? "errors.unknown";
@@ -203,6 +226,35 @@ async function handleCreate(): Promise<void> {
       </div>
 
       <div v-else-if="currentTemplate" class="field-block">
+        <h3 class="section-title">{{ $t("createPage.portsTitle") }}</h3>
+
+        <div v-if="ports.length > 0" class="param-list">
+          <article
+            v-for="(port, index) in ports"
+            :key="`${port.container}-${port.protocol}-${index}`"
+            class="param-item"
+          >
+            <label class="field-label" :for="`port-${index}`">{{
+              $t("createPage.hostPortLabel")
+            }}</label>
+            <input
+              :id="`port-${index}`"
+              v-model.number="ports[index].host"
+              class="text-input"
+              type="number"
+              min="1"
+            />
+            <p class="field-hint">
+              {{
+                $t("createPage.containerPortHint", {
+                  container: port.container,
+                  protocol: port.protocol,
+                })
+              }}
+            </p>
+          </article>
+        </div>
+
         <h3 class="section-title">{{ $t("createPage.paramsTitle") }}</h3>
 
         <div v-if="currentTemplate.params.length === 0" class="state-message compact">

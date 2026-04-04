@@ -13,7 +13,7 @@ import (
 // InstanceService 定义 API Handler 依赖的业务操作。
 type InstanceService interface {
 	ListInstances(ctx context.Context) ([]model.Instance, error)
-	CreateInstance(ctx context.Context, name, gameID string, params map[string]string) (string, error)
+	CreateInstance(ctx context.Context, name, gameID string, params map[string]string, ports []model.PortMapping) (string, error)
 	StartInstance(ctx context.Context, containerID string) error
 	StopInstance(ctx context.Context, containerID string) error
 	DeleteInstance(ctx context.Context, containerID string) error
@@ -31,9 +31,10 @@ func NewHandler(svc InstanceService) *Handler {
 
 // createRequest 定义创建实例请求体。
 type createRequest struct {
-	Name   string            `json:"name"`
-	GameID string            `json:"game_id"`
-	Params map[string]string `json:"params"`
+	Name   string              `json:"name"`
+	GameID string              `json:"game_id"`
+	Params map[string]string   `json:"params"`
+	Ports  []model.PortMapping `json:"ports"`
 }
 
 // statusResponse 定义通用状态响应体。
@@ -80,7 +81,7 @@ func (h *Handler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 		req.Params = map[string]string{}
 	}
 
-	id, err := h.svc.CreateInstance(r.Context(), req.Name, req.GameID, req.Params)
+	id, err := h.svc.CreateInstance(r.Context(), req.Name, req.GameID, req.Params, req.Ports)
 	if err != nil {
 		writeJSON(w, mapErrorCode(err), statusResponse{Status: "error", Error: err.Error()})
 		return
@@ -158,6 +159,8 @@ func mapErrorCode(err error) int {
 	case errors.Is(err, model.ErrNameExists):
 		return http.StatusConflict
 	case errors.Is(err, model.ErrInstanceRunning):
+		return http.StatusConflict
+	case errors.Is(err, model.ErrContainerNotStopped):
 		return http.StatusConflict
 	case errors.Is(err, model.ErrTemplateNotFound):
 		return http.StatusInternalServerError

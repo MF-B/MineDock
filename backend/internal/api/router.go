@@ -6,7 +6,7 @@ import (
 )
 
 // NewRouter 注册 API 路由并包装中间件。
-func NewRouter(h *Handler, games *GameHandler, ws *WsHandler, console *ConsoleHandler) http.Handler {
+func NewRouter(h *Handler, games *GameHandler, ws *WsHandler, console *ConsoleHandler, config *ConfigHandler) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/instances", h.GetInstances)
@@ -14,6 +14,10 @@ func NewRouter(h *Handler, games *GameHandler, ws *WsHandler, console *ConsoleHa
 	mux.HandleFunc("POST /api/instances/{id}/start", h.StartInstance)
 	mux.HandleFunc("POST /api/instances/{id}/stop", h.StopInstance)
 	mux.HandleFunc("DELETE /api/instances/{id}", h.DeleteInstance)
+	if config != nil {
+		mux.HandleFunc("GET /api/instances/{id}/config", config.HandleGetConfig)
+		mux.HandleFunc("PUT /api/instances/{id}/config", config.HandleUpdateConfig)
+	}
 	if ws != nil {
 		mux.HandleFunc("GET /api/ws/events", ws.HandleEvents)
 	}
@@ -37,7 +41,7 @@ func withCORS(next http.Handler) http.Handler {
 		}
 
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 		if r.Method == http.MethodOptions {

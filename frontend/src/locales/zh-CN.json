@@ -18,6 +18,23 @@
     "statusUnknown": "状态未知",
     "mountMissing": "终端尚未准备好，请稍后重试。"
   },
+  "tabs": {
+    "console": "控制台",
+    "config": "配置"
+  },
+  "config": {
+    "title": "服务器配置",
+    "loading": "正在加载当前配置...",
+    "portsTitle": "端口映射",
+    "hostPortLabel": "宿主机端口",
+    "containerPortHint": "容器端口：{container}/{protocol}",
+    "save": "保存配置",
+    "saving": "保存中...",
+    "saveSuccess": "配置已更新，容器已重建。",
+    "mustStopFirst": "需要先停止容器才能修改配置。",
+    "noTemplate": "无法加载模板信息。",
+    "restartNote": "保存后请手动启动容器使配置生效。"
+  },
   "createModal": {
     "title": "新建容器",
     "placeholder": "请输入新容器名称...",
@@ -38,6 +55,9 @@
     "nameLabel": "容器名称",
     "namePlaceholder": "请输入容器名称",
     "loadingTemplate": "模板详情加载中...",
+    "portsTitle": "端口映射",
+    "hostPortLabel": "宿主机端口",
+    "containerPortHint": "容器端口：{container}/{protocol}",
     "paramsTitle": "参数配置",
     "noParams": "该模板没有可调整参数。",
     "booleanEnabled": "启用",
@@ -75,6 +95,7 @@
     "invalidContainerId": "容器 ID 无效。",
     "instanceNameExists": "容器名称已存在，请更换后重试。",
     "instanceRunning": "容器运行中，请先停止后再删除。",
+    "containerNotStopped": "容器必须处于停止状态后才能更新配置。",
     "unknown": "发生未知错误，请稍后重试。"
   },
   "sidebar": {

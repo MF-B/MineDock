@@ -105,7 +105,20 @@ async function request<T = unknown>(path: string, options: RequestOptions = {}):
 export interface Instance {
   container_id: string;
   name: string;
+  game_id?: string;
   status: string;
+}
+
+export interface InstanceConfig {
+  game_id: string;
+  status: string;
+  ports: PortMapping[];
+  params: Record<string, string>;
+}
+
+export interface UpdateConfigResponse {
+  status: string;
+  container_id: string;
 }
 
 export interface WsInstancesUpdated {
@@ -203,10 +216,11 @@ export function createInstance(
   name: string,
   gameId: string,
   params: Record<string, string> = {},
+  ports: PortMapping[] = [],
 ): Promise<unknown> {
   return request("/instances", {
     method: "POST",
-    body: { name, game_id: gameId, params },
+    body: { name, game_id: gameId, params, ports },
   });
 }
 
@@ -225,5 +239,22 @@ export function stopInstance(containerId: string): Promise<unknown> {
 export function deleteInstance(containerId: string): Promise<unknown> {
   return request(`/instances/${containerId}`, {
     method: "DELETE",
+  });
+}
+
+export function getInstanceConfig(containerId: string): Promise<InstanceConfig> {
+  return request<InstanceConfig>(`/instances/${encodeURIComponent(containerId)}/config`, {
+    method: "GET",
+  });
+}
+
+export function updateInstanceConfig(
+  containerId: string,
+  params: Record<string, string>,
+  ports: PortMapping[],
+): Promise<UpdateConfigResponse> {
+  return request<UpdateConfigResponse>(`/instances/${encodeURIComponent(containerId)}/config`, {
+    method: "PUT",
+    body: { params, ports },
   });
 }

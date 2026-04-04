@@ -15,7 +15,7 @@ import (
 // mockService 为 Handler 测试实现 InstanceService。
 type mockService struct {
 	listFn   func(ctx context.Context) ([]model.Instance, error)
-	createFn func(ctx context.Context, name, gameID string, params map[string]string) (string, error)
+	createFn func(ctx context.Context, name, gameID string, params map[string]string, ports []model.PortMapping) (string, error)
 	startFn  func(ctx context.Context, id string) error
 	stopFn   func(ctx context.Context, id string) error
 	deleteFn func(ctx context.Context, id string) error
@@ -24,8 +24,13 @@ type mockService struct {
 func (m *mockService) ListInstances(ctx context.Context) ([]model.Instance, error) {
 	return m.listFn(ctx)
 }
-func (m *mockService) CreateInstance(ctx context.Context, name, gameID string, params map[string]string) (string, error) {
-	return m.createFn(ctx, name, gameID, params)
+func (m *mockService) CreateInstance(
+	ctx context.Context,
+	name, gameID string,
+	params map[string]string,
+	ports []model.PortMapping,
+) (string, error) {
+	return m.createFn(ctx, name, gameID, params, ports)
 }
 func (m *mockService) StartInstance(ctx context.Context, id string) error {
 	return m.startFn(ctx, id)
@@ -66,7 +71,7 @@ func newTestRouter(m *mockService) http.Handler {
 			return model.GameTemplate{}, model.ErrGameNotFound
 		},
 	})
-	return NewRouter(h, gh, nil, nil)
+	return NewRouter(h, gh, nil, nil, nil)
 }
 
 // --- GET /api/instances 场景 ---
@@ -123,7 +128,7 @@ func TestGetGames_Success(t *testing.T) {
 			return model.GameTemplate{}, model.ErrGameNotFound
 		},
 	})
-	router := NewRouter(h, gh, nil, nil)
+	router := NewRouter(h, gh, nil, nil, nil)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/games", nil)
@@ -155,7 +160,7 @@ func TestGetGameTemplate_Success(t *testing.T) {
 			return model.GameTemplate{Image: model.TemplateImage{Name: "itzg/minecraft-server", Tag: "latest"}}, nil
 		},
 	})
-	router := NewRouter(h, gh, nil, nil)
+	router := NewRouter(h, gh, nil, nil, nil)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/games/minecraft-java/template", nil)
@@ -184,7 +189,7 @@ func TestGetGameTemplate_NotFound(t *testing.T) {
 			return model.GameTemplate{}, model.ErrGameNotFound
 		},
 	})
-	router := NewRouter(h, gh, nil, nil)
+	router := NewRouter(h, gh, nil, nil, nil)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/games/not-exists/template", nil)
@@ -199,7 +204,7 @@ func TestGetGameTemplate_NotFound(t *testing.T) {
 
 func TestCreateInstance_Success(t *testing.T) {
 	router := newTestRouter(&mockService{
-		createFn: func(_ context.Context, name, gameID string, params map[string]string) (string, error) {
+		createFn: func(_ context.Context, name, gameID string, params map[string]string, ports []model.PortMapping) (string, error) {
 			if name != "test-server" {
 				t.Fatalf("unexpected name: %s", name)
 			}
@@ -209,11 +214,14 @@ func TestCreateInstance_Success(t *testing.T) {
 			if params["SERVER_TYPE"] != "PAPER" {
 				t.Fatalf("unexpected params: %+v", params)
 			}
+			if len(ports) != 1 || ports[0].Host != 25575 || ports[0].Container != 25565 || ports[0].Protocol != "tcp" {
+				t.Fatalf("unexpected ports: %+v", ports)
+			}
 			return "abc123", nil
 		},
 	})
 
-	body := `{"name":"test-server","game_id":"minecraft-java","params":{"SERVER_TYPE":"PAPER"}}`
+	body := `{"name":"test-server","game_id":"minecraft-java","params":{"SERVER_TYPE":"PAPER"},"ports":[{"host":25575,"container":25565,"protocol":"tcp"}]}`
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/instances", strings.NewReader(body))
 	router.ServeHTTP(w, r)
@@ -269,7 +277,7 @@ func TestCreateInstance_EmptyGameID(t *testing.T) {
 
 func TestCreateInstance_NameConflict(t *testing.T) {
 	router := newTestRouter(&mockService{
-		createFn: func(_ context.Context, _, _ string, _ map[string]string) (string, error) {
+		createFn: func(_ context.Context, _, _ string, _ map[string]string, _ []model.PortMapping) (string, error) {
 			return "", model.ErrNameExists
 		},
 	})
@@ -285,7 +293,7 @@ func TestCreateInstance_NameConflict(t *testing.T) {
 
 func TestCreateInstance_GameNotFound(t *testing.T) {
 	router := newTestRouter(&mockService{
-		createFn: func(_ context.Context, _, _ string, _ map[string]string) (string, error) {
+		createFn: func(_ context.Context, _, _ string, _ map[string]string, _ []model.PortMapping) (string, error) {
 			return "", model.ErrGameNotFound
 		},
 	})
@@ -301,7 +309,7 @@ func TestCreateInstance_GameNotFound(t *testing.T) {
 
 func TestCreateInstance_InvalidParams(t *testing.T) {
 	router := newTestRouter(&mockService{
-		createFn: func(_ context.Context, _, _ string, _ map[string]string) (string, error) {
+		createFn: func(_ context.Context, _, _ string, _ map[string]string, _ []model.PortMapping) (string, error) {
 			return "", fmtWrap(model.ErrInvalidParams)
 		},
 	})
@@ -438,5 +446,11 @@ func TestMapErrorCode_InvalidParamsWrapped(t *testing.T) {
 	}
 	if !errors.Is(fmtWrap(model.ErrInvalidParams), model.ErrInvalidParams) {
 		t.Fatal("expected wrapped error to match ErrInvalidParams")
+	}
+}
+
+func TestMapErrorCode_ContainerNotStopped(t *testing.T) {
+	if got := mapErrorCode(model.ErrContainerNotStopped); got != http.StatusConflict {
+		t.Fatalf("expected 409 for container-not-stopped, got %d", got)
 	}
 }

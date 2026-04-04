@@ -5,7 +5,7 @@
 ## 约定
 
 - Base URL: `/api`
-- CORS: 允许任意来源,允许方法 `GET,POST,DELETE,OPTIONS`
+- CORS: 允许任意来源,允许方法 `GET,POST,PUT,DELETE,OPTIONS`
 
 ## HTTP接口
 
@@ -98,7 +98,7 @@
   - 成功：`200`
   - 失败：`400`（JSON非法/空名称/缺失 game_id/game_id 不合法/params 非法）、`409`（名称冲突）、`500`（模板不存在或模板非法/容器创建失败）
 - 行为说明：
-  - 端口映射来源：模板 `container.ports`
+  - 端口映射来源：模板 `container.ports`，可在请求体 `ports` 中覆盖 host 端口
   - 卷挂载来源：模板 `container.volumes`，卷名规则为 `minedock-{instanceName}-{volumeName}`
   - 若宿主机端口冲突，返回 Docker 原生错误并映射为 `500`
 - 请求参数：
@@ -107,6 +107,7 @@
 {
   "name": "容器1号",
   "game_id": "minecraft-java",
+  "ports": [{ "host": 25575, "container": 25565, "protocol": "tcp" }],
   "params": {
     "SERVER_TYPE": "PAPER",
     "ONLINE_MODE": "true"
@@ -157,6 +158,51 @@
 
 ```json
 { "status": "success" }
+```
+
+### GET /api/instances/:id/config
+
+- 说明：获取容器当前生效的可编辑配置（包含模板 `params` 定义参数与可编辑端口映射）
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（ID非法）、`500`
+- 请求参数：无（ID 在路径中）
+- 返回结果：
+
+```json
+{
+  "game_id": "minecraft-java",
+  "status": "Stopped",
+  "ports": [{ "host": 25565, "container": 25565, "protocol": "tcp" }],
+  "params": {
+    "SERVER_TYPE": "PAPER",
+    "MAX_PLAYERS": "20"
+  }
+}
+```
+
+### PUT /api/instances/:id/config
+
+- 说明：更新容器配置（参数 + 端口映射，通过重建容器实现，容器必须处于 Stopped）
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（ID非法/参数非法）、`409`（容器未停止）、`500`
+- 请求参数：
+
+```json
+{
+  "ports": [{ "host": 25575, "container": 25565, "protocol": "tcp" }],
+  "params": {
+    "SERVER_TYPE": "FABRIC",
+    "MAX_PLAYERS": "50"
+  }
+}
+```
+
+- 返回结果：
+
+```json
+{ "status": "success", "container_id": "new_container_id" }
 ```
 
 ### GET /api/ws/events (WebSocket)
