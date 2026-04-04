@@ -4,6 +4,9 @@ import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useConsole } from "../composables/useConsole";
 import { useContainerStore } from "../stores/containers";
+import InstanceConfig from "./InstanceConfig.vue";
+
+type DetailTab = "console" | "config";
 
 const route = useRoute();
 const router = useRouter();
@@ -12,6 +15,7 @@ const store = useContainerStore();
 
 const loading = ref(true);
 const containerId = ref("");
+const activeTab = ref<DetailTab>("console");
 
 const { terminalRef, error, init, dispose } = useConsole(containerId);
 
@@ -80,6 +84,18 @@ async function loadInstance(): Promise<void> {
   loading.value = false;
 }
 
+function switchTab(tab: DetailTab): void {
+  activeTab.value = tab;
+}
+
+function handleReconfigured(newContainerID: string): void {
+  const normalized = parseContainerID(newContainerID);
+  if (!normalized || normalized === containerId.value) {
+    return;
+  }
+  void router.push({ name: "InstanceDetail", params: { id: normalized } });
+}
+
 function backToList(): void {
   void router.push({ name: "ContainerList" });
 }
@@ -93,9 +109,9 @@ watch(
 );
 
 watch(
-  [loading, canAttach],
-  ([isLoading, running]) => {
-    if (isLoading || !running) {
+  [loading, canAttach, activeTab],
+  ([isLoading, running, tab]) => {
+    if (isLoading || tab !== "console" || !running) {
       dispose();
       return;
     }
@@ -121,14 +137,41 @@ onUnmounted(() => {
   </header>
 
   <main class="main-content">
-    <section class="terminal-panel">
-      <div v-if="infoKey" class="panel-overlay">
-        {{ $t(infoKey) }}
-      </div>
-      <div v-else ref="terminalRef" class="terminal-host"></div>
+    <nav class="tab-nav" role="tablist" aria-label="Instance detail tabs">
+      <button
+        class="tab-btn"
+        :class="{ 'is-active': activeTab === 'console' }"
+        role="tab"
+        type="button"
+        :aria-selected="activeTab === 'console'"
+        @click="switchTab('console')"
+      >
+        {{ $t("tabs.console") }}
+      </button>
+      <button
+        class="tab-btn"
+        :class="{ 'is-active': activeTab === 'config' }"
+        role="tab"
+        type="button"
+        :aria-selected="activeTab === 'config'"
+        @click="switchTab('config')"
+      >
+        {{ $t("tabs.config") }}
+      </button>
+    </nav>
+
+    <section class="tab-content">
+      <section v-if="activeTab === 'console'" class="terminal-panel">
+        <div v-if="infoKey" class="panel-overlay">
+          {{ $t(infoKey) }}
+        </div>
+        <div v-else ref="terminalRef" class="terminal-host"></div>
+      </section>
+
+      <InstanceConfig v-else :container-id="containerId" @reconfigured="handleReconfigured" />
     </section>
 
-    <footer v-if="displayError" class="status-bar">
+    <footer v-if="activeTab === 'console' && displayError" class="status-bar">
       <div class="error-text">{{ displayError }}</div>
     </footer>
   </main>
@@ -186,12 +229,48 @@ onUnmounted(() => {
   margin: 0 auto;
   padding: 8px 24px 24px;
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: auto 1fr auto;
   gap: 12px;
+}
+
+.tab-nav {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--create-border-outer);
+  padding-bottom: 2px;
+}
+
+.tab-btn {
+  border: 1px solid transparent;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  color: var(--create-brass-primary);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.tab-btn.is-active {
+  color: var(--create-brass-primary);
+  border-color: var(--create-border-outer);
+  border-bottom-color: transparent;
+  background: rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 -2px 0 var(--create-brass-primary);
+}
+
+.tab-content {
+  min-height: 0;
 }
 
 .terminal-panel {
   min-height: 0;
+  height: 100%;
   position: relative;
   border: 1px solid var(--create-border-outer);
   background: radial-gradient(circle at top, rgba(33, 55, 40, 0.9), rgba(9, 12, 11, 0.95));
@@ -241,6 +320,10 @@ onUnmounted(() => {
 
   .main-content {
     padding: 8px 12px 12px;
+  }
+
+  .tab-btn {
+    padding: 8px 12px;
   }
 
   .status-bar {

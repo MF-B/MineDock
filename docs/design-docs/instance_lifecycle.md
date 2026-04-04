@@ -10,7 +10,7 @@ type Instance struct {
     ContainerID string `json:"container_id"`
     // 服务端名称
     Name        string `json:"name"`
-    // 来源游戏模板 ID（创建请求字段，当前版本未持久化到 instances 表）
+    // 来源游戏模板 ID（持久化在 instances 表，用于配置编辑时回查模板）
     GameID      string `json:"game_id"`
     // 当前运行态
     Status      string `json:"status"`
@@ -23,6 +23,7 @@ type Instance struct {
 - `container_id`（主键）
 - `name`（唯一）
 - `status`
+- `game_id`
 - `created_at`
 
 ## 接口
@@ -44,6 +45,15 @@ stateDiagram-v2
 - 端口映射来源：模板 `container.ports`，创建容器时写入 Docker `ExposedPorts` 与 `PortBindings`。
 - 卷挂载来源：模板 `container.volumes`，卷名规则为 `minedock-{instanceName}-{volumeName}`。
 - 启动命令来源：若模板配置了 `container.command` 则覆盖镜像命令；否则使用镜像默认 `ENTRYPOINT/CMD`。
+
+## 在线配置修改
+
+- 修改范围：允许编辑模板 `params` 定义的用户参数，以及模板端口映射对应的宿主机端口；模板固定环境变量 `container.env` 不可直接修改。
+- 变更方式：通过重建容器应用新配置，流程为 `Inspect -> Remove(old) -> Create(new env + port bindings)`。
+- 状态约束：仅允许在 Stopped 状态下执行配置更新，运行中返回冲突错误。
+- 生效方式：更新完成后容器保持 Stopped，需用户手动启动使配置生效。
+- 保留策略：复用原有卷挂载与端口映射，避免卷数据丢失。
+- 标识变化：重建后 `container_id` 会变化，前端需跳转到新的详情路由。
 
 ## 一致性策略
 

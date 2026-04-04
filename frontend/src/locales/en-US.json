@@ -18,6 +18,23 @@
     "statusUnknown": "Unknown",
     "mountMissing": "Terminal is not ready yet. Please try again."
   },
+  "tabs": {
+    "console": "Console",
+    "config": "Config"
+  },
+  "config": {
+    "title": "Server Config",
+    "loading": "Loading current configuration...",
+    "portsTitle": "Port Bindings",
+    "hostPortLabel": "Host Port",
+    "containerPortHint": "Container port: {container}/{protocol}",
+    "save": "Save Config",
+    "saving": "Saving...",
+    "saveSuccess": "Config updated and container recreated.",
+    "mustStopFirst": "Stop the container before editing config.",
+    "noTemplate": "Unable to load template details.",
+    "restartNote": "Start the container manually after saving to apply changes."
+  },
   "createModal": {
     "title": "New Container",
     "placeholder": "Enter container name...",
@@ -38,6 +55,9 @@
     "nameLabel": "Container Name",
     "namePlaceholder": "Enter container name",
     "loadingTemplate": "Loading template details...",
+    "portsTitle": "Port Bindings",
+    "hostPortLabel": "Host Port",
+    "containerPortHint": "Container port: {container}/{protocol}",
     "paramsTitle": "Parameters",
     "noParams": "This template has no configurable parameters.",
     "booleanEnabled": "Enabled",
@@ -75,6 +95,7 @@
     "invalidContainerId": "The container ID is invalid.",
     "instanceNameExists": "Container name already exists. Please choose another one.",
     "instanceRunning": "The container is running. Stop it before deleting.",
+    "containerNotStopped": "Container must be stopped before updating config.",
     "unknown": "An unknown error occurred. Please try again later."
   },
   "sidebar": {

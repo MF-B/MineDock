@@ -4,5 +4,6 @@ package model
 type Instance struct {
 	ContainerID string `json:"container_id"`
 	Name        string `json:"name"`
+	GameID      string `json:"game_id"`
 	Status      string `json:"status"`
 }

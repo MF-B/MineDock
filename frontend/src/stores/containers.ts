@@ -5,6 +5,7 @@ import {
   ApiRequestError,
   listInstances,
   createInstance as apiCreate,
+  type PortMapping,
   deleteInstance as apiDelete,
   startInstance as apiStart,
   stopInstance as apiStop,
@@ -24,6 +25,7 @@ const backendMessageKeyMap: Record<string, string> = {
   "invalid container id": "errors.invalidContainerId",
   "instance name already exists": "errors.instanceNameExists",
   "instance is running, stop it before delete": "errors.instanceRunning",
+  "container must be stopped to update config": "errors.containerNotStopped",
 };
 
 function mapBackendMessageToKey(message: string): string | undefined {
@@ -180,9 +182,10 @@ export const useContainerStore = defineStore("containers", () => {
     name: string,
     gameId: string,
     params: Record<string, string> = {},
+    ports: PortMapping[] = [],
   ): Promise<boolean> {
     try {
-      const data = await apiCreate(name, gameId, params);
+      const data = await apiCreate(name, gameId, params, ports);
       print(data);
       await fetchInstances();
       return true;
