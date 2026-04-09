@@ -14,7 +14,7 @@ import (
 	_ "modernc.org/sqlite" // 注册 SQLite 驱动
 )
 
-// SQLiteStore 在本地 SQLite 数据库中持久化实例状态。
+// SQLiteStore 在本地 SQLite 数据库中持久化实例元数据。
 type SQLiteStore struct {
 	db *sql.DB
 }
@@ -68,7 +68,6 @@ CREATE TABLE IF NOT EXISTS instances (
 	container_id TEXT PRIMARY KEY,
 	name TEXT NOT NULL UNIQUE,
 	game_id TEXT NOT NULL DEFAULT '',
-	status TEXT NOT NULL,
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 `
@@ -101,16 +100,15 @@ ADD COLUMN game_id TEXT NOT NULL DEFAULT '';
 // Save 按容器 ID 执行实例记录的 upsert。
 func (s *SQLiteStore) Save(ctx context.Context, instance model.Instance) error {
 	const upsert = `
-INSERT INTO instances(container_id, name, game_id, status)
-VALUES(?, ?, ?, ?)
+INSERT INTO instances(container_id, name, game_id)
+VALUES(?, ?, ?)
 ON CONFLICT(container_id)
 DO UPDATE SET
 	name = excluded.name,
-	game_id = excluded.game_id,
-	status = excluded.status;
+	game_id = excluded.game_id;
 `
 
-	_, err := s.db.ExecContext(ctx, upsert, instance.ContainerID, instance.Name, instance.GameID, instance.Status)
+	_, err := s.db.ExecContext(ctx, upsert, instance.ContainerID, instance.Name, instance.GameID)
 	if err != nil {
 		if isUniqueNameErr(err) {
 			return model.ErrNameExists
@@ -132,13 +130,13 @@ func (s *SQLiteStore) Delete(ctx context.Context, containerID string) error {
 // Get 按容器 ID 获取一条实例记录。
 func (s *SQLiteStore) Get(ctx context.Context, containerID string) (model.Instance, bool, error) {
 	const q = `
-SELECT container_id, name, game_id, status
+SELECT container_id, name, game_id
 FROM instances
 WHERE container_id = ?;
 `
 
 	var inst model.Instance
-	err := s.db.QueryRowContext(ctx, q, containerID).Scan(&inst.ContainerID, &inst.Name, &inst.GameID, &inst.Status)
+	err := s.db.QueryRowContext(ctx, q, containerID).Scan(&inst.ContainerID, &inst.Name, &inst.GameID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Instance{}, false, nil
 	}
@@ -151,7 +149,7 @@ WHERE container_id = ?;
 // List 返回所有实例记录，并按创建时间倒序排列。
 func (s *SQLiteStore) List(ctx context.Context) ([]model.Instance, error) {
 	const q = `
-SELECT container_id, name, game_id, status
+SELECT container_id, name, game_id
 FROM instances
 ORDER BY created_at DESC;
 `
@@ -165,7 +163,7 @@ ORDER BY created_at DESC;
 	out := make([]model.Instance, 0)
 	for rows.Next() {
 		var inst model.Instance
-		if err := rows.Scan(&inst.ContainerID, &inst.Name, &inst.GameID, &inst.Status); err != nil {
+		if err := rows.Scan(&inst.ContainerID, &inst.Name, &inst.GameID); err != nil {
 			return nil, fmt.Errorf("scan instance: %w", err)
 		}
 		out = append(out, inst)

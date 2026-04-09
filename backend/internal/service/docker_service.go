@@ -534,7 +534,7 @@ func sanitizeVolumeNameToken(raw string) string {
 	return token
 }
 
-// StartInstance 启动托管容器并更新持久化状态。
+// StartInstance 启动托管容器并更新持久化记录。
 func (s *DockerService) StartInstance(ctx context.Context, containerID string) error {
 	if err := s.cli.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
 		return fmt.Errorf("start container: %w", err)
@@ -551,7 +551,7 @@ func (s *DockerService) StartInstance(ctx context.Context, containerID string) e
 	return nil
 }
 
-// StopInstance 停止托管容器并更新持久化状态。
+// StopInstance 停止托管容器并更新持久化记录。
 func (s *DockerService) StopInstance(ctx context.Context, containerID string) error {
 	timeout := 10
 	if err := s.cli.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout}); err != nil {
@@ -569,7 +569,7 @@ func (s *DockerService) StopInstance(ctx context.Context, containerID string) er
 	return nil
 }
 
-// ListInstances 列出托管容器并将快照状态同步到存储层。
+// ListInstances 列出托管容器并将快照元数据同步到存储层。
 // TODO: 将逐条 Save 改为批量或事务化同步路径。
 // TODO: 增加并发写保护，避免最后写入覆盖前写入。
 func (s *DockerService) ListInstances(ctx context.Context) ([]model.Instance, error) {
