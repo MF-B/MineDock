@@ -128,9 +128,7 @@ func (h *EventHub) runOnce(ctx context.Context) (bool, error) {
 	}
 
 	timer := time.NewTimer(time.Hour)
-	if !timer.Stop() {
-		<-timer.C
-	}
+	stopAndDrainTimer(timer)
 	timerCh := (<-chan time.Time)(nil)
 	pending := false
 
@@ -138,12 +136,7 @@ func (h *EventHub) runOnce(ctx context.Context) (bool, error) {
 		select {
 		case <-ctx.Done():
 			if timerCh != nil {
-				if !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
-					}
-				}
+				stopAndDrainTimer(timer)
 			}
 			return healthy, nil
 		case _, ok := <-msgCh:
@@ -152,14 +145,7 @@ func (h *EventHub) runOnce(ctx context.Context) (bool, error) {
 			}
 			pending = true
 			healthy = true
-			if !timer.Stop() {
-				select {
-				case <-timer.C:
-				default:
-				}
-			}
-			timer.Reset(h.debounceWindow)
-			timerCh = timer.C
+			timerCh = resetTimer(timer, h.debounceWindow)
 		case err, ok := <-errCh:
 			if !ok {
 				return healthy, fmt.Errorf("docker events error channel closed")
@@ -313,5 +299,23 @@ func (h *EventHub) closeAllClients(code websocket.StatusCode, reason string) {
 
 	for _, conn := range clients {
 		_ = conn.Close(code, reason)
+	}
+}
+
+func resetTimer(timer *time.Timer, d time.Duration) <-chan time.Time {
+	stopAndDrainTimer(timer)
+	timer.Reset(d)
+	return timer.C
+}
+
+func stopAndDrainTimer(timer *time.Timer) {
+	if timer == nil {
+		return
+	}
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
 	}
 }
