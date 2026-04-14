@@ -7,9 +7,12 @@ import {
   type GameTemplate,
   type InstanceConfig as InstanceConfigPayload,
   type PortMapping,
+  type ResourceLimits,
   type TemplateParam,
   updateInstanceConfig,
 } from "../api/index";
+
+type ResourceUnit = "g" | "m";
 
 const props = defineProps<{ containerId: string }>();
 
@@ -27,6 +30,10 @@ const config = ref<InstanceConfigPayload | null>(null);
 const template = ref<GameTemplate | null>(null);
 const ports = ref<PortMapping[]>([]);
 const values = ref<Record<string, string>>({});
+const resourceEnabled = ref(false);
+const resourceMemoryValue = ref(0);
+const resourceMemoryUnit = ref<ResourceUnit>("g");
+const resourceCPUValue = ref(0);
 
 const isRunning = computed(() => {
   const status = config.value?.status ?? "";
@@ -35,6 +42,10 @@ const isRunning = computed(() => {
 });
 
 const editable = computed(() => !loading.value && !saving.value && !isRunning.value);
+const hasEditableFields = computed(() => {
+  const paramCount = template.value?.params.length ?? 0;
+  return ports.value.length > 0 || paramCount > 0 || resourceEnabled.value;
+});
 
 watch(
   () => props.containerId,
@@ -107,6 +118,87 @@ function initializeValues(
   values.value = next;
 }
 
+function roundFloat(value: number, digits = 2): number {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function formatNumber(value: number, digits = 2): string {
+  const fixed = value.toFixed(digits);
+  return fixed.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+}
+
+function parseMemoryToMB(raw: string): number | null {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) {
+    return null;
+  }
+
+  const matched = trimmed.match(/^([0-9]*\.?[0-9]+)\s*([gmkb]?)$/);
+  if (!matched) {
+    return null;
+  }
+
+  const value = Number(matched[1]);
+  if (!Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  const unit = matched[2] || "b";
+  switch (unit) {
+    case "g":
+      return value * 1024;
+    case "m":
+      return value;
+    case "k":
+      return value / 1024;
+    case "b":
+      return value / (1024 * 1024);
+    default:
+      return null;
+  }
+}
+
+function setResourceInputs(memoryMB: number, cpu: number): void {
+  const normalized = roundFloat(memoryMB, 2);
+  if (normalized >= 1024) {
+    resourceMemoryUnit.value = "g";
+    resourceMemoryValue.value = roundFloat(normalized / 1024, 2);
+  } else {
+    resourceMemoryUnit.value = "m";
+    resourceMemoryValue.value = roundFloat(normalized, 2);
+  }
+
+  resourceCPUValue.value = roundFloat(cpu, 2);
+}
+
+function initializeResources(
+  currentTemplate: GameTemplate,
+  currentConfig: InstanceConfigPayload,
+): void {
+  const source = currentConfig.resources ?? currentTemplate.container.resources;
+  if (!source) {
+    resourceEnabled.value = false;
+    resourceMemoryValue.value = 0;
+    resourceMemoryUnit.value = "g";
+    resourceCPUValue.value = 0;
+    return;
+  }
+
+  const memoryMB = parseMemoryToMB(source.memory);
+  const cpu = Number(source.cpu);
+  if (memoryMB == null || memoryMB <= 0 || !Number.isFinite(cpu) || cpu <= 0) {
+    resourceEnabled.value = false;
+    resourceMemoryValue.value = 0;
+    resourceMemoryUnit.value = "g";
+    resourceCPUValue.value = 0;
+    return;
+  }
+
+  resourceEnabled.value = true;
+  setResourceInputs(memoryMB, cpu);
+}
+
 function isBooleanParamEnabled(key: string): boolean {
   return values.value[key] === "true";
 }
@@ -141,6 +233,39 @@ function buildPortsPayload(): PortMapping[] {
   }));
 }
 
+function buildResourcesPayload(): ResourceLimits | undefined {
+  if (!resourceEnabled.value) {
+    return undefined;
+  }
+
+  const memoryValue = Number(resourceMemoryValue.value);
+  const cpuValue = Number(resourceCPUValue.value);
+
+  return {
+    memory: `${formatNumber(memoryValue)}${resourceMemoryUnit.value}`,
+    cpu: roundFloat(cpuValue, 2),
+  };
+}
+
+function validateResources(resources: ResourceLimits | undefined): boolean {
+  if (!resources) {
+    return true;
+  }
+
+  const memoryMB = parseMemoryToMB(resources.memory);
+  if (memoryMB == null || memoryMB < 256) {
+    saveErrorKey.value = "errors.invalidResourceLimits";
+    return false;
+  }
+
+  if (!Number.isFinite(resources.cpu) || resources.cpu < 0.5) {
+    saveErrorKey.value = "errors.invalidResourceLimits";
+    return false;
+  }
+
+  return true;
+}
+
 async function loadConfig(): Promise<void> {
   loading.value = true;
   saving.value = false;
@@ -151,6 +276,10 @@ async function loadConfig(): Promise<void> {
   template.value = null;
   ports.value = [];
   values.value = {};
+  resourceEnabled.value = false;
+  resourceMemoryValue.value = 0;
+  resourceMemoryUnit.value = "g";
+  resourceCPUValue.value = 0;
 
   const id = props.containerId.trim();
   if (!id) {
@@ -180,6 +309,7 @@ async function loadConfig(): Promise<void> {
     const currentTemplate = await getGameTemplate(currentConfig.game_id);
     template.value = currentTemplate;
     initializeValues(currentTemplate, currentConfig);
+    initializeResources(currentTemplate, currentConfig);
   } catch {
     loadErrorKey.value = "config.noTemplate";
   }
@@ -199,11 +329,18 @@ async function handleSave(): Promise<void> {
   saveErrorKey.value = "";
   saveSuccess.value = false;
 
+  const resources = buildResourcesPayload();
+  if (!validateResources(resources)) {
+    saving.value = false;
+    return;
+  }
+
   try {
     const resp = await updateInstanceConfig(
       props.containerId,
       buildParamsPayload(),
       buildPortsPayload(),
+      resources,
     );
     saveSuccess.value = true;
     emit("reconfigured", resp.container_id);
@@ -258,6 +395,48 @@ async function handleSave(): Promise<void> {
             }}
           </p>
         </article>
+      </div>
+
+      <div class="port-list">
+        <h3 class="section-title">{{ $t("config.resourcesTitle") }}</h3>
+
+        <article v-if="resourceEnabled" class="port-item">
+          <label class="field-label" for="cfg-memory">{{ $t("config.memoryLabel") }}</label>
+          <div class="resource-input-row">
+            <input
+              id="cfg-memory"
+              v-model.number="resourceMemoryValue"
+              class="text-input"
+              type="number"
+              min="0.25"
+              step="0.25"
+              :disabled="!editable"
+            />
+            <select
+              v-model="resourceMemoryUnit"
+              class="text-input resource-unit-select"
+              :disabled="!editable"
+            >
+              <option value="g">GB</option>
+              <option value="m">MB</option>
+            </select>
+          </div>
+
+          <label class="field-label" for="cfg-cpu">{{ $t("config.cpuLabel") }}</label>
+          <input
+            id="cfg-cpu"
+            v-model.number="resourceCPUValue"
+            class="text-input"
+            type="number"
+            min="0.5"
+            step="0.1"
+            :disabled="!editable"
+          />
+
+          <p class="field-hint">{{ $t("config.resourcesHint") }}</p>
+        </article>
+
+        <div v-else class="state-message">{{ $t("config.resourcesUnavailable") }}</div>
       </div>
 
       <div v-if="template.params.length === 0" class="state-message">
@@ -326,7 +505,7 @@ async function handleSave(): Promise<void> {
         <button
           class="save-btn"
           type="button"
-          :disabled="!editable || template.params.length === 0"
+          :disabled="!editable || !hasEditableFields"
           @click="handleSave"
         >
           {{ saving ? $t("config.saving") : $t("config.save") }}
@@ -492,5 +671,16 @@ async function handleSave(): Promise<void> {
   margin: 0;
   color: var(--danger);
   font-size: 13px;
+}
+
+.resource-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.resource-unit-select {
+  width: 100px;
+  flex-shrink: 0;
 }
 </style>

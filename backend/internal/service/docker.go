@@ -56,10 +56,11 @@ type GameRegistry interface {
 
 // InstanceConfig 描述容器当前生效的可编辑配置。
 type InstanceConfig struct {
-	GameID string              `json:"game_id"`
-	Status string              `json:"status"`
-	Ports  []model.PortMapping `json:"ports"`
-	Params map[string]string   `json:"params"`
+	GameID    string                `json:"game_id"`
+	Status    string                `json:"status"`
+	Ports     []model.PortMapping   `json:"ports"`
+	Params    map[string]string     `json:"params"`
+	Resources *model.ResourceLimits `json:"resources,omitempty"`
 }
 
 // DockerService 封装容器管理相关业务逻辑。
@@ -81,6 +82,7 @@ func (s *DockerService) CreateInstance(
 	name, gameID string,
 	params map[string]string,
 	ports []model.PortMapping,
+	resources *model.ResourceLimits,
 ) (string, error) {
 	if s.registry == nil {
 		return "", fmt.Errorf("game registry is not configured")
@@ -123,6 +125,13 @@ func (s *DockerService) CreateInstance(
 	hostConfig := &container.HostConfig{
 		PortBindings: portBindings,
 		Binds:        buildVolumeBinds(name, tpl.Container.Volumes),
+	}
+	effectiveResources := tpl.Container.Resources
+	if resources != nil {
+		effectiveResources = resources
+	}
+	if err := applyResourceLimits(hostConfig, effectiveResources); err != nil {
+		return "", err
 	}
 
 	resp, err := s.cli.ContainerCreate(ctx, &container.Config{
@@ -204,10 +213,11 @@ func (s *DockerService) GetInstanceConfig(ctx context.Context, containerID strin
 	}
 
 	return &InstanceConfig{
-		GameID: gameID,
-		Status: instanceStatusFromState(inspect.State),
-		Ports:  ports,
-		Params: params,
+		GameID:    gameID,
+		Status:    instanceStatusFromState(inspect.State),
+		Ports:     ports,
+		Params:    params,
+		Resources: readResourceLimits(inspect.HostConfig),
 	}, nil
 }
 
@@ -217,6 +227,7 @@ func (s *DockerService) UpdateInstanceConfig(
 	containerID string,
 	newParams map[string]string,
 	newPorts []model.PortMapping,
+	newResources *model.ResourceLimits,
 ) (string, error) {
 	if s.registry == nil {
 		return "", fmt.Errorf("game registry is not configured")
@@ -269,6 +280,13 @@ func (s *DockerService) UpdateInstanceConfig(
 		hostConfig.Binds = append([]string(nil), inspect.HostConfig.Binds...)
 	}
 	hostConfig.PortBindings = portBindings
+	resolvedResources := readResourceLimits(inspect.HostConfig)
+	if newResources != nil {
+		resolvedResources = newResources
+	}
+	if err := applyResourceLimits(hostConfig, resolvedResources); err != nil {
+		return "", err
+	}
 
 	labels := copyStringMap(inspect.Config.Labels)
 	labels[managedLabelKey] = managedLabelValue

@@ -13,7 +13,13 @@ import (
 // InstanceService 定义 API Handler 依赖的业务操作。
 type InstanceService interface {
 	ListInstances(ctx context.Context) ([]model.Instance, error)
-	CreateInstance(ctx context.Context, name, gameID string, params map[string]string, ports []model.PortMapping) (string, error)
+	CreateInstance(
+		ctx context.Context,
+		name, gameID string,
+		params map[string]string,
+		ports []model.PortMapping,
+		resources *model.ResourceLimits,
+	) (string, error)
 	StartInstance(ctx context.Context, containerID string) error
 	StopInstance(ctx context.Context, containerID string) error
 	DeleteInstance(ctx context.Context, containerID string) error
@@ -31,10 +37,11 @@ func NewHandler(svc InstanceService) *Handler {
 
 // createRequest 定义创建实例请求体。
 type createRequest struct {
-	Name   string              `json:"name"`
-	GameID string              `json:"game_id"`
-	Params map[string]string   `json:"params"`
-	Ports  []model.PortMapping `json:"ports"`
+	Name      string                `json:"name"`
+	GameID    string                `json:"game_id"`
+	Params    map[string]string     `json:"params"`
+	Ports     []model.PortMapping   `json:"ports"`
+	Resources *model.ResourceLimits `json:"resources,omitempty"`
 }
 
 // statusResponse 定义通用状态响应体。
@@ -81,7 +88,7 @@ func (h *Handler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 		req.Params = map[string]string{}
 	}
 
-	id, err := h.svc.CreateInstance(r.Context(), req.Name, req.GameID, req.Params, req.Ports)
+	id, err := h.svc.CreateInstance(r.Context(), req.Name, req.GameID, req.Params, req.Ports, req.Resources)
 	if err != nil {
 		writeJSON(w, mapErrorCode(err), statusResponse{Status: "error", Error: err.Error()})
 		return
@@ -155,6 +162,8 @@ func mapErrorCode(err error) int {
 	case errors.Is(err, model.ErrGameNotFound):
 		return http.StatusBadRequest
 	case errors.Is(err, model.ErrInvalidParams):
+		return http.StatusBadRequest
+	case errors.Is(err, model.ErrInvalidResourceLimits):
 		return http.StatusBadRequest
 	case errors.Is(err, model.ErrNameExists):
 		return http.StatusConflict

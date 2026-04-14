@@ -2,9 +2,12 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import type { GameTemplate, PortMapping, TemplateParam } from "../api/index";
+import type { GameTemplate, PortMapping, ResourceLimits, TemplateParam } from "../api/index";
 import { useGameStore } from "../stores/games";
 import { useContainerStore } from "../stores/containers";
+
+type ResourceUnit = "g" | "m";
+type ResourcePreset = "conservative" | "recommended" | "highPerformance";
 
 const route = useRoute();
 const router = useRouter();
@@ -19,6 +22,11 @@ const containerName = ref("");
 const pageErrorKey = ref("");
 const ports = ref<PortMapping[]>([]);
 const paramValues = ref<Record<string, string>>({});
+const resourceEnabled = ref(false);
+const selectedResourcePreset = ref<ResourcePreset>("recommended");
+const resourceMemoryValue = ref(0);
+const resourceMemoryUnit = ref<ResourceUnit>("g");
+const resourceCPUValue = ref(0);
 
 const currentGame = computed(() => {
   return gameStore.getGameById(currentGameID.value) ?? null;
@@ -55,6 +63,11 @@ async function initializeForRoute(): Promise<void> {
   containerName.value = "";
   ports.value = [];
   paramValues.value = {};
+  resourceEnabled.value = false;
+  selectedResourcePreset.value = "recommended";
+  resourceMemoryValue.value = 0;
+  resourceMemoryUnit.value = "g";
+  resourceCPUValue.value = 0;
 
   const gameID = parseRouteGameID(route.params.gameId);
   currentGameID.value = gameID;
@@ -101,10 +114,126 @@ function initParamValuesFromTemplate(template: GameTemplate | null): void {
     for (const param of template.params) {
       next[param.key] = getDefaultParamValue(param);
     }
+
+    initializeResourcesFromTemplate(template);
   } else {
     ports.value = [];
+    initializeResourcesFromTemplate(null);
   }
   paramValues.value = next;
+}
+
+function roundFloat(value: number, digits = 2): number {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function formatNumber(value: number, digits = 2): string {
+  const fixed = value.toFixed(digits);
+  return fixed.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+}
+
+function parseMemoryToMB(raw: string): number | null {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) {
+    return null;
+  }
+
+  const matched = trimmed.match(/^([0-9]*\.?[0-9]+)\s*([gmkb]?)$/);
+  if (!matched) {
+    return null;
+  }
+
+  const value = Number(matched[1]);
+  if (!Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  const unit = matched[2] || "b";
+  switch (unit) {
+    case "g":
+      return value * 1024;
+    case "m":
+      return value;
+    case "k":
+      return value / 1024;
+    case "b":
+      return value / (1024 * 1024);
+    default:
+      return null;
+  }
+}
+
+function getTemplateResourceBase(
+  template: GameTemplate | null,
+): { memoryMB: number; cpu: number } | null {
+  const resources = template?.container.resources;
+  if (!resources) {
+    return null;
+  }
+
+  const memoryMB = parseMemoryToMB(resources.memory);
+  if (memoryMB == null || memoryMB <= 0) {
+    return null;
+  }
+
+  const cpu = Number(resources.cpu);
+  if (!Number.isFinite(cpu) || cpu <= 0) {
+    return null;
+  }
+
+  return { memoryMB, cpu };
+}
+
+function setResourceInputs(memoryMB: number, cpu: number): void {
+  const normalizedMemory = roundFloat(memoryMB, 2);
+  if (normalizedMemory >= 1024) {
+    resourceMemoryUnit.value = "g";
+    resourceMemoryValue.value = roundFloat(normalizedMemory / 1024, 2);
+  } else {
+    resourceMemoryUnit.value = "m";
+    resourceMemoryValue.value = roundFloat(normalizedMemory, 2);
+  }
+  resourceCPUValue.value = roundFloat(cpu, 2);
+}
+
+function initializeResourcesFromTemplate(template: GameTemplate | null): void {
+  const base = getTemplateResourceBase(template);
+  if (!base) {
+    resourceEnabled.value = false;
+    selectedResourcePreset.value = "recommended";
+    resourceMemoryValue.value = 0;
+    resourceMemoryUnit.value = "g";
+    resourceCPUValue.value = 0;
+    return;
+  }
+
+  resourceEnabled.value = true;
+  selectedResourcePreset.value = "recommended";
+  setResourceInputs(base.memoryMB, base.cpu);
+}
+
+function applyResourcePreset(preset: ResourcePreset): void {
+  const base = getTemplateResourceBase(currentTemplate.value);
+  if (!base) {
+    return;
+  }
+
+  selectedResourcePreset.value = preset;
+
+  if (preset === "recommended") {
+    setResourceInputs(base.memoryMB, base.cpu);
+    return;
+  }
+  if (preset === "conservative") {
+    setResourceInputs(base.memoryMB * 0.75, Math.max(0.5, base.cpu - 0.5));
+    return;
+  }
+  setResourceInputs(base.memoryMB * 1.25, base.cpu + 1);
+}
+
+function markResourceAsCustom(): void {
+  selectedResourcePreset.value = "recommended";
 }
 
 function getDefaultParamValue(param: TemplateParam): string {
@@ -153,6 +282,40 @@ function getCreatePortsPayload(): PortMapping[] {
   }));
 }
 
+function getCreateResourcesPayload(): ResourceLimits | undefined {
+  if (!resourceEnabled.value) {
+    return undefined;
+  }
+
+  const memoryValue = Number(resourceMemoryValue.value);
+  const cpuValue = Number(resourceCPUValue.value);
+  const memory = `${formatNumber(memoryValue)}${resourceMemoryUnit.value}`;
+
+  return {
+    memory,
+    cpu: roundFloat(cpuValue, 2),
+  };
+}
+
+function validateResources(resources: ResourceLimits | undefined): boolean {
+  if (!resources) {
+    return true;
+  }
+
+  const memoryMB = parseMemoryToMB(resources.memory);
+  if (memoryMB == null || memoryMB < 256) {
+    pageErrorKey.value = "errors.invalidResourceLimits";
+    return false;
+  }
+
+  if (!Number.isFinite(resources.cpu) || resources.cpu < 0.5) {
+    pageErrorKey.value = "errors.invalidResourceLimits";
+    return false;
+  }
+
+  return true;
+}
+
 function cancelCreate(): void {
   void router.push({ name: "ImageRegistry" });
 }
@@ -174,11 +337,18 @@ async function handleCreate(): Promise<void> {
   creating.value = true;
   containerStore.print(t("status.creating"));
 
+  const resourcesPayload = getCreateResourcesPayload();
+  if (!validateResources(resourcesPayload)) {
+    creating.value = false;
+    return;
+  }
+
   const success = await containerStore.create(
     name,
     gameID,
     getCreateParamsPayload(),
     getCreatePortsPayload(),
+    resourcesPayload,
   );
   creating.value = false;
   if (!success) {
@@ -253,6 +423,83 @@ async function handleCreate(): Promise<void> {
               }}
             </p>
           </article>
+        </div>
+
+        <h3 class="section-title">{{ $t("createPage.resourcesTitle") }}</h3>
+
+        <div v-if="resourceEnabled" class="resource-block">
+          <div class="preset-buttons">
+            <button
+              class="preset-btn"
+              :class="{ 'is-active': selectedResourcePreset === 'conservative' }"
+              type="button"
+              @click="applyResourcePreset('conservative')"
+            >
+              {{ $t("createPage.resourcePresetConservative") }}
+            </button>
+            <button
+              class="preset-btn"
+              :class="{ 'is-active': selectedResourcePreset === 'recommended' }"
+              type="button"
+              @click="applyResourcePreset('recommended')"
+            >
+              {{ $t("createPage.resourcePresetRecommended") }}
+            </button>
+            <button
+              class="preset-btn"
+              :class="{ 'is-active': selectedResourcePreset === 'highPerformance' }"
+              type="button"
+              @click="applyResourcePreset('highPerformance')"
+            >
+              {{ $t("createPage.resourcePresetHighPerformance") }}
+            </button>
+          </div>
+
+          <div class="resource-grid">
+            <article class="param-item">
+              <label class="field-label" for="resource-memory">{{
+                $t("createPage.memoryLabel")
+              }}</label>
+              <div class="resource-input-row">
+                <input
+                  id="resource-memory"
+                  v-model.number="resourceMemoryValue"
+                  class="text-input"
+                  type="number"
+                  min="0.25"
+                  step="0.25"
+                  @input="markResourceAsCustom"
+                />
+                <select
+                  v-model="resourceMemoryUnit"
+                  class="text-input resource-unit-select"
+                  @change="markResourceAsCustom"
+                >
+                  <option value="g">GB</option>
+                  <option value="m">MB</option>
+                </select>
+              </div>
+            </article>
+
+            <article class="param-item">
+              <label class="field-label" for="resource-cpu">{{ $t("createPage.cpuLabel") }}</label>
+              <input
+                id="resource-cpu"
+                v-model.number="resourceCPUValue"
+                class="text-input"
+                type="number"
+                min="0.5"
+                step="0.1"
+                @input="markResourceAsCustom"
+              />
+            </article>
+          </div>
+
+          <p class="field-hint">{{ $t("createPage.resourcesHint") }}</p>
+        </div>
+
+        <div v-else class="state-message compact">
+          {{ $t("createPage.resourcesUnavailable") }}
         </div>
 
         <h3 class="section-title">{{ $t("createPage.paramsTitle") }}</h3>
@@ -418,6 +665,50 @@ async function handleCreate(): Promise<void> {
   gap: 12px;
 }
 
+.resource-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.preset-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset-btn {
+  padding: 6px 10px;
+  border: 1px solid var(--create-border-outer);
+  background: rgba(0, 0, 0, 0.16);
+  color: var(--text-on-dark);
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.preset-btn.is-active {
+  background: var(--create-brass-dark);
+  border-color: var(--create-brass-primary);
+}
+
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.resource-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.resource-unit-select {
+  width: 100px;
+  flex-shrink: 0;
+}
+
 .param-item {
   border: 1px solid var(--create-border-outer);
   border-radius: 6px;
@@ -517,6 +808,10 @@ async function handleCreate(): Promise<void> {
 @media (max-width: 767px) {
   .main-content {
     padding: 8px 16px 20px 16px;
+  }
+
+  .resource-grid {
+    grid-template-columns: 1fr;
   }
 
   .actions {

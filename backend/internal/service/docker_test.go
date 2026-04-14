@@ -313,8 +313,15 @@ func TestGetInstanceConfig_Success(t *testing.T) {
 	cli := &fakeDockerClient{
 		inspectResp: container.InspectResponse{
 			ContainerJSONBase: &container.ContainerJSONBase{
-				State:      &container.State{Running: true},
-				HostConfig: &container.HostConfig{PortBindings: nat.PortMap{port: []nat.PortBinding{{HostPort: "25575"}}}},
+				State: &container.State{Running: true},
+				HostConfig: &container.HostConfig{
+					Resources: container.Resources{
+						Memory:    2 * 1024 * 1024 * 1024,
+						CPUPeriod: defaultCPUPeriod,
+						CPUQuota:  2 * defaultCPUPeriod,
+					},
+					PortBindings: nat.PortMap{port: []nat.PortBinding{{HostPort: "25575"}}},
+				},
 			},
 			Config: &container.Config{
 				Labels: map[string]string{
@@ -365,6 +372,12 @@ func TestGetInstanceConfig_Success(t *testing.T) {
 	if cfg.Ports[0].Host != 25575 || cfg.Ports[0].Container != 25565 || cfg.Ports[0].Protocol != "tcp" {
 		t.Fatalf("unexpected config ports: %+v", cfg.Ports)
 	}
+	if cfg.Resources == nil {
+		t.Fatal("expected resources in config")
+	}
+	if cfg.Resources.Memory != "2g" || cfg.Resources.CPU != 2 {
+		t.Fatalf("unexpected resources: %+v", cfg.Resources)
+	}
 }
 
 func TestUpdateInstanceConfig_RejectRunning(t *testing.T) {
@@ -379,7 +392,7 @@ func TestUpdateInstanceConfig_RejectRunning(t *testing.T) {
 
 	svc := NewDockerService(cli, newFakeInstanceStore(), &fakeRegistry{})
 
-	_, err := svc.UpdateInstanceConfig(context.Background(), "c1", map[string]string{"MAX_PLAYERS": "50"}, nil)
+	_, err := svc.UpdateInstanceConfig(context.Background(), "c1", map[string]string{"MAX_PLAYERS": "50"}, nil, nil)
 	if !errors.Is(err, model.ErrContainerNotStopped) {
 		t.Fatalf("expected ErrContainerNotStopped, got %v", err)
 	}
@@ -435,7 +448,7 @@ func TestUpdateInstanceConfig_Success(t *testing.T) {
 		Host:      25575,
 		Container: 25565,
 		Protocol:  "tcp",
-	}})
+	}}, nil)
 	if err != nil {
 		t.Fatalf("UpdateInstanceConfig: %v", err)
 	}
@@ -497,7 +510,7 @@ func TestUpdateInstanceConfig_InvalidParams(t *testing.T) {
 
 	svc := NewDockerService(cli, newFakeInstanceStore(), registry)
 
-	_, err := svc.UpdateInstanceConfig(context.Background(), "c1", map[string]string{"MAX_PLAYERS": "NaN??"}, nil)
+	_, err := svc.UpdateInstanceConfig(context.Background(), "c1", map[string]string{"MAX_PLAYERS": "NaN??"}, nil, nil)
 	if !errors.Is(err, model.ErrInvalidParams) {
 		t.Fatalf("expected ErrInvalidParams, got %v", err)
 	}
@@ -524,9 +537,177 @@ func TestUpdateInstanceConfig_InvalidPorts(t *testing.T) {
 		Host:      19132,
 		Container: 19132,
 		Protocol:  "udp",
-	}})
+	}}, nil)
 	if !errors.Is(err, model.ErrInvalidParams) {
 		t.Fatalf("expected ErrInvalidParams for unknown ports, got %v", err)
+	}
+}
+
+func TestCreateInstance_UsesTemplateResources(t *testing.T) {
+	cli := &fakeDockerClient{}
+	store := newFakeInstanceStore()
+	registry := &fakeRegistry{
+		game: model.Game{ID: "minecraft-java", Name: "Minecraft Java"},
+		template: model.GameTemplate{
+			Image: model.TemplateImage{Name: "itzg/minecraft-server", Tag: "latest"},
+			Container: model.ContainerConfig{
+				Ports: []model.PortMapping{{Host: 25565, Container: 25565, Protocol: "tcp"}},
+				Env:   map[string]string{"EULA": "TRUE"},
+				Resources: &model.ResourceLimits{
+					Memory: "2g",
+					CPU:    2,
+				},
+			},
+		},
+	}
+
+	svc := NewDockerService(cli, store, registry)
+
+	_, err := svc.CreateInstance(context.Background(), "server-1", "minecraft-java", map[string]string{}, nil, nil)
+	if err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+	if cli.createHost == nil {
+		t.Fatal("expected host config")
+	}
+	if cli.createHost.Memory != 2*1024*1024*1024 {
+		t.Fatalf("unexpected memory: %d", cli.createHost.Memory)
+	}
+	if cli.createHost.CPUPeriod != defaultCPUPeriod || cli.createHost.CPUQuota != 2*defaultCPUPeriod {
+		t.Fatalf("unexpected cpu limits: period=%d quota=%d", cli.createHost.CPUPeriod, cli.createHost.CPUQuota)
+	}
+}
+
+func TestCreateInstance_OverrideResources(t *testing.T) {
+	cli := &fakeDockerClient{}
+	store := newFakeInstanceStore()
+	registry := &fakeRegistry{
+		game: model.Game{ID: "minecraft-java", Name: "Minecraft Java"},
+		template: model.GameTemplate{
+			Image: model.TemplateImage{Name: "itzg/minecraft-server", Tag: "latest"},
+			Container: model.ContainerConfig{
+				Ports: []model.PortMapping{{Host: 25565, Container: 25565, Protocol: "tcp"}},
+				Env:   map[string]string{"EULA": "TRUE"},
+				Resources: &model.ResourceLimits{
+					Memory: "2g",
+					CPU:    2,
+				},
+			},
+		},
+	}
+
+	svc := NewDockerService(cli, store, registry)
+
+	_, err := svc.CreateInstance(
+		context.Background(),
+		"server-1",
+		"minecraft-java",
+		map[string]string{},
+		nil,
+		&model.ResourceLimits{Memory: "1g", CPU: 1},
+	)
+	if err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+	if cli.createHost == nil {
+		t.Fatal("expected host config")
+	}
+	if cli.createHost.Memory != 1024*1024*1024 {
+		t.Fatalf("unexpected memory: %d", cli.createHost.Memory)
+	}
+	if cli.createHost.CPUQuota != defaultCPUPeriod {
+		t.Fatalf("unexpected cpu quota: %d", cli.createHost.CPUQuota)
+	}
+}
+
+func TestCreateInstance_InvalidResources(t *testing.T) {
+	cli := &fakeDockerClient{}
+	store := newFakeInstanceStore()
+	registry := &fakeRegistry{
+		game: model.Game{ID: "minecraft-java", Name: "Minecraft Java"},
+		template: model.GameTemplate{
+			Image: model.TemplateImage{Name: "itzg/minecraft-server", Tag: "latest"},
+			Container: model.ContainerConfig{
+				Ports: []model.PortMapping{{Host: 25565, Container: 25565, Protocol: "tcp"}},
+				Env:   map[string]string{"EULA": "TRUE"},
+			},
+		},
+	}
+
+	svc := NewDockerService(cli, store, registry)
+
+	_, err := svc.CreateInstance(
+		context.Background(),
+		"server-1",
+		"minecraft-java",
+		map[string]string{},
+		nil,
+		&model.ResourceLimits{Memory: "bad", CPU: 0},
+	)
+	if !errors.Is(err, model.ErrInvalidResourceLimits) {
+		t.Fatalf("expected ErrInvalidResourceLimits, got %v", err)
+	}
+}
+
+func TestUpdateInstanceConfig_OverrideResources(t *testing.T) {
+	port, err := nat.NewPort("tcp", "25565")
+	if err != nil {
+		t.Fatalf("new port: %v", err)
+	}
+
+	cli := &fakeDockerClient{
+		inspectResp: container.InspectResponse{
+			ContainerJSONBase: &container.ContainerJSONBase{
+				Name: "/docker-name",
+				HostConfig: &container.HostConfig{
+					Binds:        []string{"minedock-server-data:/data"},
+					PortBindings: nat.PortMap{port: []nat.PortBinding{{HostPort: "25565"}}},
+					Resources: container.Resources{
+						Memory:    2 * 1024 * 1024 * 1024,
+						CPUPeriod: defaultCPUPeriod,
+						CPUQuota:  2 * defaultCPUPeriod,
+					},
+				},
+				State: &container.State{Running: false},
+			},
+			Config: &container.Config{
+				Image: "itzg/minecraft-server:latest",
+				Labels: map[string]string{
+					managedLabelKey: "true",
+					nameLabelKey:    "server-1",
+					gameIDLabelKey:  "minecraft-java",
+				},
+			},
+		},
+		createResp: container.CreateResponse{ID: "new-id"},
+	}
+	registry := &fakeRegistry{
+		template: model.GameTemplate{
+			Container: model.ContainerConfig{
+				Ports: []model.PortMapping{{Host: 25565, Container: 25565, Protocol: "tcp"}},
+				Env:   map[string]string{},
+			},
+		},
+	}
+	store := newFakeInstanceStore(model.Instance{ContainerID: "old-id", Name: "server-1", GameID: "minecraft-java", Status: "Stopped"})
+
+	svc := NewDockerService(cli, store, registry)
+
+	_, err = svc.UpdateInstanceConfig(
+		context.Background(),
+		"old-id",
+		map[string]string{},
+		nil,
+		&model.ResourceLimits{Memory: "1g", CPU: 1},
+	)
+	if err != nil {
+		t.Fatalf("UpdateInstanceConfig: %v", err)
+	}
+	if cli.createHost.Memory != 1024*1024*1024 {
+		t.Fatalf("unexpected memory: %d", cli.createHost.Memory)
+	}
+	if cli.createHost.CPUPeriod != defaultCPUPeriod || cli.createHost.CPUQuota != defaultCPUPeriod {
+		t.Fatalf("unexpected cpu limits: period=%d quota=%d", cli.createHost.CPUPeriod, cli.createHost.CPUQuota)
 	}
 }
 

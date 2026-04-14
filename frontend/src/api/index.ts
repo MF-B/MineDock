@@ -114,6 +114,7 @@ export interface InstanceConfig {
   status: string;
   ports: PortMapping[];
   params: Record<string, string>;
+  resources?: ResourceLimits;
 }
 
 export interface UpdateConfigResponse {
@@ -217,10 +218,11 @@ export function createInstance(
   gameId: string,
   params: Record<string, string> = {},
   ports: PortMapping[] = [],
+  resources?: ResourceLimits,
 ): Promise<unknown> {
   return request("/instances", {
     method: "POST",
-    body: { name, game_id: gameId, params, ports },
+    body: { name, game_id: gameId, params, ports, resources },
   });
 }
 
@@ -252,9 +254,10 @@ export function updateInstanceConfig(
   containerId: string,
   params: Record<string, string>,
   ports: PortMapping[],
+  resources?: ResourceLimits,
 ): Promise<UpdateConfigResponse> {
   return request<UpdateConfigResponse>(`/instances/${encodeURIComponent(containerId)}/config`, {
     method: "PUT",
-    body: { params, ports },
+    body: { params, ports, resources },
   });
 }

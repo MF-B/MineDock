@@ -17,6 +17,7 @@ type InstanceConfigurator interface {
 		containerID string,
 		params map[string]string,
 		ports []model.PortMapping,
+		resources *model.ResourceLimits,
 	) (string, error)
 }
 
@@ -31,8 +32,9 @@ func NewConfigHandler(cfg InstanceConfigurator) *ConfigHandler {
 }
 
 type updateConfigRequest struct {
-	Params map[string]string   `json:"params"`
-	Ports  []model.PortMapping `json:"ports"`
+	Params    map[string]string     `json:"params"`
+	Ports     []model.PortMapping   `json:"ports"`
+	Resources *model.ResourceLimits `json:"resources,omitempty"`
 }
 
 type updateConfigResponse struct {
@@ -84,7 +86,7 @@ func (h *ConfigHandler) HandleUpdateConfig(w http.ResponseWriter, r *http.Reques
 		req.Params = map[string]string{}
 	}
 
-	newID, err := h.cfg.UpdateInstanceConfig(r.Context(), id, req.Params, req.Ports)
+	newID, err := h.cfg.UpdateInstanceConfig(r.Context(), id, req.Params, req.Ports, req.Resources)
 	if err != nil {
 		writeJSON(w, mapErrorCode(err), statusResponse{Status: "error", Error: err.Error()})
 		return

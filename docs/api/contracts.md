@@ -96,10 +96,11 @@
 - 说明：创建一个新容器（初始为 Stopped），并应用模板中的端口映射与卷挂载配置
 - 状态码：
   - 成功：`200`
-  - 失败：`400`（JSON非法/空名称/缺失 game_id/game_id 不合法/params 非法）、`409`（名称冲突）、`500`（模板不存在或模板非法/容器创建失败）
+  - 失败：`400`（JSON非法/空名称/缺失 game_id/game_id 不合法/params 非法/resources 非法）、`409`（名称冲突）、`500`（模板不存在或模板非法/容器创建失败）
 - 行为说明：
   - 端口映射来源：模板 `container.ports`，可在请求体 `ports` 中覆盖 host 端口
   - 卷挂载来源：模板 `container.volumes`，卷名规则为 `minedock-{instanceName}-{volumeName}`
+  - 资源限制来源：默认使用模板 `container.resources`，可在请求体 `resources` 中覆盖
   - 若宿主机端口冲突，返回 Docker 原生错误并映射为 `500`
 - 请求参数：
 
@@ -111,6 +112,10 @@
   "params": {
     "SERVER_TYPE": "PAPER",
     "ONLINE_MODE": "true"
+  },
+  "resources": {
+    "memory": "2g",
+    "cpu": 2
   }
 }
 ```
@@ -174,6 +179,7 @@
   "game_id": "minecraft-java",
   "status": "Stopped",
   "ports": [{ "host": 25565, "container": 25565, "protocol": "tcp" }],
+  "resources": { "memory": "2g", "cpu": 2 },
   "params": {
     "SERVER_TYPE": "PAPER",
     "MAX_PLAYERS": "20"
@@ -183,7 +189,7 @@
 
 ### PUT /api/instances/:id/config
 
-- 说明：更新容器配置（参数 + 端口映射，通过重建容器实现，容器必须处于 Stopped）
+- 说明：更新容器配置（参数 + 端口映射 + 资源限制，通过重建容器实现，容器必须处于 Stopped）
 - 状态码：
   - 成功：`200`
   - 失败：`400`（ID非法/参数非法）、`409`（容器未停止）、`500`
@@ -192,6 +198,7 @@
 ```json
 {
   "ports": [{ "host": 25575, "container": 25565, "protocol": "tcp" }],
+  "resources": { "memory": "1.5g", "cpu": 1.5 },
   "params": {
     "SERVER_TYPE": "FABRIC",
     "MAX_PLAYERS": "50"
