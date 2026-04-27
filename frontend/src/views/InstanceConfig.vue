@@ -499,28 +499,30 @@ async function handleSave(): Promise<void> {
 
 <style scoped>
 .config-panel {
-  border: 1px solid var(--create-border-outer);
-  background: rgba(0, 0, 0, 0.18);
-  border-radius: 8px;
-  padding: 16px;
+  border: none;
+  background: transparent;
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 8px; /* buffer for scrollbar */
 }
 
 .config-header {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  border-bottom: 1px solid var(--create-border-outer);
+  border-bottom: 2px solid var(--card-border-inner);
   padding-bottom: 10px;
 }
 
 .config-title {
   margin: 0;
-  color: var(--create-brass-primary);
+  color: var(--card-text);
   font-size: 18px;
+  font-weight: 600;
 }
 
 .config-note {
@@ -532,7 +534,7 @@ async function handleSave(): Promise<void> {
 .state-message {
   text-align: center;
   color: var(--text-muted);
-  border: 1px dashed var(--border-muted);
+  border: 2px dashed var(--card-border-inner);
   border-radius: 8px;
   padding: 16px;
 }
@@ -544,9 +546,9 @@ async function handleSave(): Promise<void> {
 }
 
 .state-warning {
-  color: var(--create-brass-primary);
-  border-color: var(--create-border-outer);
-  background: rgba(0, 0, 0, 0.24);
+  color: #856404;
+  border-color: #ffeeba;
+  background: #fff3cd;
 }
 
 .param-list {
@@ -564,52 +566,57 @@ async function handleSave(): Promise<void> {
 .section-title {
   margin: 0;
   font-size: 15px;
-  color: var(--create-brass-primary);
+  color: var(--card-text);
+  font-weight: 600;
 }
 
 .port-item {
-  border: 1px solid var(--create-border-outer);
+  border: 1px solid var(--card-border-inner);
   border-radius: 6px;
-  padding: 10px;
-  background: rgba(0, 0, 0, 0.14);
+  padding: 12px;
+  background: transparent;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
 .param-item {
-  border: 1px solid var(--create-border-outer);
+  border: 1px solid var(--card-border-inner);
   border-radius: 6px;
-  padding: 10px;
-  background: rgba(0, 0, 0, 0.14);
+  padding: 12px;
+  background: transparent;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
 }
 
 .field-label {
   font-size: 13px;
-  color: var(--text-on-dark);
+  color: var(--card-text);
+  font-weight: 500;
+  word-break: break-word;
 }
 
 .field-hint {
   margin: 0;
   font-size: 12px;
   color: var(--text-muted);
+  word-break: break-word;
 }
 
 .text-input {
   padding: 8px 10px;
-  background: var(--input-bg);
-  border: 1px solid var(--input-border);
-  color: var(--text-on-dark);
+  background: #ffffff;
+  border: 1px solid var(--card-border-inner);
+  color: var(--card-text);
   border-radius: 4px;
   outline: none;
   width: 100%;
 }
 
 .text-input:focus {
-  border-color: var(--create-brass-primary);
+  border-color: var(--card-border);
 }
 
 .boolean-field {
@@ -617,7 +624,8 @@ async function handleSave(): Promise<void> {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: var(--text-on-dark);
+  color: var(--card-text);
+  word-break: break-word;
 }
 
 .actions {
@@ -627,12 +635,18 @@ async function handleSave(): Promise<void> {
 
 .save-btn {
   padding: 8px 16px;
-  border: 1px solid var(--create-border-outer);
-  background: var(--create-brass-dark);
+  border: 1px solid var(--create-border-dark);
+  background: var(--create-brass-secondary);
   color: var(--card-text);
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.save-btn:hover:not(:disabled) {
+  background: var(--create-brass-primary);
 }
 
 .save-btn:disabled {
@@ -662,10 +676,10 @@ async function handleSave(): Promise<void> {
   min-width: 64px;
   height: 34px;
   padding: 0 10px;
-  border: 1px solid var(--input-border);
+  border: 1px solid var(--card-border-inner);
   border-radius: 4px;
-  background: var(--input-bg);
-  color: var(--text-on-dark);
+  background: #f0f0f0;
+  color: var(--card-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
