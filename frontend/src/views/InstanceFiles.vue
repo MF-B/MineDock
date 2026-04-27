@@ -63,7 +63,12 @@ function navigateTo(path: string) {
     ];
   } else if (path === "/mods") {
     files.value = [
-      { name: "OptiFine_1.20.1.jar", isDir: false, size: 5432100, modifiedAt: "2026-04-20T10:05:00Z" },
+      {
+        name: "OptiFine_1.20.1.jar",
+        isDir: false,
+        size: 5432100,
+        modifiedAt: "2026-04-20T10:05:00Z",
+      },
       { name: "jei-1.20.1.jar", isDir: false, size: 1234500, modifiedAt: "2026-04-20T10:06:00Z" },
     ];
   } else {
@@ -73,7 +78,9 @@ function navigateTo(path: string) {
 
 function handleFileClick(file: FileItem) {
   if (file.isDir) {
-    const newPath = currentPath.value.endsWith("/") ? `${currentPath.value}${file.name}` : `${currentPath.value}/${file.name}`;
+    const newPath = currentPath.value.endsWith("/")
+      ? `${currentPath.value}${file.name}`
+      : `${currentPath.value}/${file.name}`;
     navigateTo(newPath);
   }
 }
@@ -91,8 +98,8 @@ function handleAction(action: string, file: FileItem) {
     <div class="files-toolbar">
       <div class="breadcrumbs">
         <template v-for="(crumb, index) in breadcrumbs" :key="crumb.path">
-          <span 
-            class="breadcrumb-item" 
+          <span
+            class="breadcrumb-item"
             :class="{ active: index === breadcrumbs.length - 1 }"
             @click="navigateTo(crumb.path)"
           >
@@ -122,12 +129,44 @@ function handleAction(action: string, file: FileItem) {
           <tr v-if="files.length === 0">
             <td colspan="4" class="empty-state">{{ $t("files.empty") }}</td>
           </tr>
-          <tr v-for="file in files" :key="file.name" class="file-row" @dblclick="handleFileClick(file)">
+          <tr
+            v-for="file in files"
+            :key="file.name"
+            class="file-row"
+            @dblclick="handleFileClick(file)"
+          >
             <td class="col-name">
               <div class="file-name-cell">
                 <span class="file-icon" :class="{ 'is-dir': file.isDir }">
-                  <svg v-if="file.isDir" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                  <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                  <svg
+                    v-if="file.isDir"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="icon"
+                  >
+                    <path
+                      d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                    ></path>
+                  </svg>
+                  <svg
+                    v-else
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="icon"
+                  >
+                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                    <polyline points="13 2 13 9 20 9"></polyline>
+                  </svg>
                 </span>
                 <span class="file-name" @click="handleFileClick(file)">{{ file.name }}</span>
               </div>
@@ -136,11 +175,48 @@ function handleAction(action: string, file: FileItem) {
             <td class="col-date">{{ formatDate(file.modifiedAt) }}</td>
             <td class="col-actions">
               <div class="row-actions">
-                <button class="icon-btn" @click.stop="handleAction('download', file)" :title="$t('files.actions.download')">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <button
+                  class="icon-btn"
+                  :title="$t('files.actions.download')"
+                  @click.stop="handleAction('download', file)"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="icon"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
                 </button>
-                <button class="icon-btn danger" @click.stop="handleAction('delete', file)" :title="$t('files.actions.delete')">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                <button
+                  class="icon-btn danger"
+                  :title="$t('files.actions.delete')"
+                  @click.stop="handleAction('delete', file)"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="icon"
+                  >
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path
+                      d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                    ></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                  </svg>
                 </button>
               </div>
             </td>

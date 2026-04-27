@@ -179,8 +179,12 @@ onUnmounted(() => {
         <div v-else ref="terminalRef" class="terminal-host"></div>
       </section>
 
-      <InstanceConfig v-else-if="activeTab === 'config'" :container-id="containerId" @reconfigured="handleReconfigured" />
-      
+      <InstanceConfig
+        v-else-if="activeTab === 'config'"
+        :container-id="containerId"
+        @reconfigured="handleReconfigured"
+      />
+
       <InstanceFiles v-else :container-id="containerId" />
     </section>
 
@@ -290,7 +294,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   padding: 16px;
-  box-shadow: 4px 4px 12px rgba(0,0,0,0.3);
+  box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .terminal-panel {
@@ -301,7 +305,7 @@ onUnmounted(() => {
   background: radial-gradient(circle at top, #213728, #090c0b);
   border-radius: 4px;
   overflow: hidden;
-  box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8);
 }
 
 .terminal-host {
@@ -329,7 +333,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  box-shadow: 4px 4px 12px rgba(0,0,0,0.3);
+  box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .error-text {
