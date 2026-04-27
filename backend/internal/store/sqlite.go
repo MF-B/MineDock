@@ -14,7 +14,7 @@ import (
 	_ "modernc.org/sqlite" // 注册 SQLite 驱动
 )
 
-// SQLiteStore 在本地 SQLite 数据库中持久化实例状态。
+// SQLiteStore 在本地 SQLite 数据库中持久化实例元数据。
 type SQLiteStore struct {
 	db *sql.DB
 }
@@ -67,7 +67,7 @@ func (s *SQLiteStore) InitSchema(ctx context.Context) error {
 CREATE TABLE IF NOT EXISTS instances (
 	container_id TEXT PRIMARY KEY,
 	name TEXT NOT NULL UNIQUE,
-	status TEXT NOT NULL,
+	game_id TEXT NOT NULL DEFAULT '',
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 `
@@ -75,21 +75,40 @@ CREATE TABLE IF NOT EXISTS instances (
 	if _, err := s.db.ExecContext(ctx, schema); err != nil {
 		return fmt.Errorf("init instances table: %w", err)
 	}
+	if err := s.ensureGameIDColumn(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *SQLiteStore) ensureGameIDColumn(ctx context.Context) error {
+	const addGameIDColumn = `
+ALTER TABLE instances
+ADD COLUMN game_id TEXT NOT NULL DEFAULT '';
+`
+
+	if _, err := s.db.ExecContext(ctx, addGameIDColumn); err != nil {
+		if isDuplicateColumnErr(err) {
+			return nil
+		}
+		return fmt.Errorf("ensure instances.game_id column: %w", err)
+	}
+
 	return nil
 }
 
 // Save 按容器 ID 执行实例记录的 upsert。
 func (s *SQLiteStore) Save(ctx context.Context, instance model.Instance) error {
 	const upsert = `
-INSERT INTO instances(container_id, name, status)
+INSERT INTO instances(container_id, name, game_id)
 VALUES(?, ?, ?)
 ON CONFLICT(container_id)
 DO UPDATE SET
 	name = excluded.name,
-	status = excluded.status;
+	game_id = excluded.game_id;
 `
 
-	_, err := s.db.ExecContext(ctx, upsert, instance.ContainerID, instance.Name, instance.Status)
+	_, err := s.db.ExecContext(ctx, upsert, instance.ContainerID, instance.Name, instance.GameID)
 	if err != nil {
 		if isUniqueNameErr(err) {
 			return model.ErrNameExists
@@ -111,13 +130,13 @@ func (s *SQLiteStore) Delete(ctx context.Context, containerID string) error {
 // Get 按容器 ID 获取一条实例记录。
 func (s *SQLiteStore) Get(ctx context.Context, containerID string) (model.Instance, bool, error) {
 	const q = `
-SELECT container_id, name, status
+SELECT container_id, name, game_id
 FROM instances
 WHERE container_id = ?;
 `
 
 	var inst model.Instance
-	err := s.db.QueryRowContext(ctx, q, containerID).Scan(&inst.ContainerID, &inst.Name, &inst.Status)
+	err := s.db.QueryRowContext(ctx, q, containerID).Scan(&inst.ContainerID, &inst.Name, &inst.GameID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Instance{}, false, nil
 	}
@@ -130,7 +149,7 @@ WHERE container_id = ?;
 // List 返回所有实例记录，并按创建时间倒序排列。
 func (s *SQLiteStore) List(ctx context.Context) ([]model.Instance, error) {
 	const q = `
-SELECT container_id, name, status
+SELECT container_id, name, game_id
 FROM instances
 ORDER BY created_at DESC;
 `
@@ -144,7 +163,7 @@ ORDER BY created_at DESC;
 	out := make([]model.Instance, 0)
 	for rows.Next() {
 		var inst model.Instance
-		if err := rows.Scan(&inst.ContainerID, &inst.Name, &inst.Status); err != nil {
+		if err := rows.Scan(&inst.ContainerID, &inst.Name, &inst.GameID); err != nil {
 			return nil, fmt.Errorf("scan instance: %w", err)
 		}
 		out = append(out, inst)
@@ -166,4 +185,12 @@ func isUniqueNameErr(err error) bool {
 	}
 	errStr := err.Error()
 	return strings.Contains(errStr, "UNIQUE constraint failed: instances.name")
+}
+
+func isDuplicateColumnErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "duplicate column name") && strings.Contains(errStr, "game_id")
 }

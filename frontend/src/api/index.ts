@@ -1,6 +1,22 @@
 const BASE_URL: string =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || "/api";
 
+const runtimeOrigin = typeof window === "undefined" ? "http://localhost" : window.location.origin;
+const resolvedBaseURL: URL = new URL(BASE_URL, runtimeOrigin);
+
+// WebSocket 仅支持同源连接：固定使用当前页面 origin，只复用 API 基础路径。
+const pageProtocol =
+  typeof window === "undefined" ? resolvedBaseURL.protocol : window.location.protocol;
+const wsProtocol = pageProtocol === "https:" ? "wss:" : "ws:";
+const wsHost = typeof window === "undefined" ? resolvedBaseURL.host : window.location.host;
+const wsPath = resolvedBaseURL.pathname.replace(/\/+$/, "");
+export const WS_BASE_URL = `${wsProtocol}//${wsHost}${wsPath}`;
+
+// consoleWsUrl 构造容器控制台 WebSocket 地址。
+export function consoleWsUrl(containerId: string): string {
+  return `${WS_BASE_URL}/ws/console/${encodeURIComponent(containerId)}`;
+}
+
 type JsonObject = Record<string, unknown>;
 
 interface RequestOptions extends Omit<RequestInit, "headers" | "body"> {
@@ -89,17 +105,124 @@ async function request<T = unknown>(path: string, options: RequestOptions = {}):
 export interface Instance {
   container_id: string;
   name: string;
+  game_id?: string;
   status: string;
+}
+
+export interface InstanceConfig {
+  game_id: string;
+  status: string;
+  ports: PortMapping[];
+  params: Record<string, string>;
+  resources?: ResourceLimits;
+}
+
+export interface UpdateConfigResponse {
+  status: string;
+  container_id: string;
+}
+
+export interface WsInstancesUpdated {
+  type: "instances_updated";
+  data: Instance[];
+}
+
+export type WsMessage = WsInstancesUpdated;
+
+export interface Game {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  icon: string;
+}
+
+export interface TemplateImage {
+  name: string;
+  tag: string;
+}
+
+export interface PortMapping {
+  host: number;
+  container: number;
+  protocol: string;
+}
+
+export interface VolumeMount {
+  name: string;
+  container_path: string;
+  readonly: boolean;
+}
+
+export interface ResourceLimits {
+  memory: string;
+  cpu: number;
+}
+
+export interface HealthCheckConfig {
+  test: string[];
+  interval: string;
+  timeout: string;
+  retries: number;
+  start_period: string;
+}
+
+export interface ContainerConfig {
+  ports: PortMapping[];
+  env: Record<string, string>;
+  volumes: VolumeMount[];
+  resources?: ResourceLimits;
+  command?: string[];
+  health_check?: HealthCheckConfig;
+}
+
+export interface ParamOption {
+  value: string;
+  label: string;
+}
+
+export type TemplateParamType = "string" | "number" | "boolean" | "select";
+
+export type TemplateParamDefault = string | number | boolean;
+
+export interface TemplateParam {
+  key: string;
+  label: string;
+  description: string;
+  type: TemplateParamType;
+  default: TemplateParamDefault;
+  options?: ParamOption[];
+  env_var?: string;
+}
+
+export interface GameTemplate {
+  image: TemplateImage;
+  container: ContainerConfig;
+  params: TemplateParam[];
 }
 
 export function listInstances(): Promise<Instance[]> {
   return request<Instance[]>("/instances", { method: "GET" });
 }
 
-export function createInstance(name: string): Promise<unknown> {
+export function listGames(): Promise<Game[]> {
+  return request<Game[]>("/games", { method: "GET" });
+}
+
+export function getGameTemplate(id: string): Promise<GameTemplate> {
+  return request<GameTemplate>(`/games/${encodeURIComponent(id)}/template`, { method: "GET" });
+}
+
+export function createInstance(
+  name: string,
+  gameId: string,
+  params: Record<string, string> = {},
+  ports: PortMapping[] = [],
+  resources?: ResourceLimits,
+): Promise<unknown> {
   return request("/instances", {
     method: "POST",
-    body: { name },
+    body: { name, game_id: gameId, params, ports, resources },
   });
 }
 
@@ -118,5 +241,23 @@ export function stopInstance(containerId: string): Promise<unknown> {
 export function deleteInstance(containerId: string): Promise<unknown> {
   return request(`/instances/${containerId}`, {
     method: "DELETE",
+  });
+}
+
+export function getInstanceConfig(containerId: string): Promise<InstanceConfig> {
+  return request<InstanceConfig>(`/instances/${encodeURIComponent(containerId)}/config`, {
+    method: "GET",
+  });
+}
+
+export function updateInstanceConfig(
+  containerId: string,
+  params: Record<string, string>,
+  ports: PortMapping[],
+  resources?: ResourceLimits,
+): Promise<UpdateConfigResponse> {
+  return request<UpdateConfigResponse>(`/instances/${encodeURIComponent(containerId)}/config`, {
+    method: "PUT",
+    body: { params, ports, resources },
   });
 }

@@ -5,6 +5,8 @@ MineDock/
 ├── .github/                # 存放 CI/CD
 ├── backend/                # 后端 Go 服务
 │   ├── data/               # 数据存储目录
+│   ├── games.json          # 游戏目录索引（轻量展示信息）
+│   ├── templates/          # 游戏模板目录（YAML，按游戏 ID 命名）
 │   ├── internal/           # 内部私有代码
 │   │   ├── api/            # 路由与 HTTP 处理层
 │   │   ├── model/          # 领域数据模型定义

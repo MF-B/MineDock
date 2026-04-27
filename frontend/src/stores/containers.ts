@@ -5,6 +5,8 @@ import {
   ApiRequestError,
   listInstances,
   createInstance as apiCreate,
+  type PortMapping,
+  type ResourceLimits,
   deleteInstance as apiDelete,
   startInstance as apiStart,
   stopInstance as apiStop,
@@ -17,11 +19,39 @@ type OutputI18nPayload = {
 
 const backendMessageKeyMap: Record<string, string> = {
   "name is required": "status.emptyName",
+  "game_id is required": "errors.gameIdRequired",
+  "game not found": "errors.gameNotFound",
+  "invalid params": "errors.invalidParams",
   "invalid json body": "errors.invalidJsonBody",
   "invalid container id": "errors.invalidContainerId",
   "instance name already exists": "errors.instanceNameExists",
   "instance is running, stop it before delete": "errors.instanceRunning",
+  "container must be stopped to update config": "errors.containerNotStopped",
+  "invalid resource limits": "errors.invalidResourceLimits",
 };
+
+function mapBackendMessageToKey(message: string): string | undefined {
+  const normalized = message.trim().toLowerCase();
+  const exact = backendMessageKeyMap[normalized];
+  if (exact) {
+    return exact;
+  }
+
+  if (normalized.includes("invalid params")) {
+    return "errors.invalidParams";
+  }
+  if (normalized.includes("game not found")) {
+    return "errors.gameNotFound";
+  }
+  if (normalized.includes("template not found")) {
+    return "errors.templateNotFound";
+  }
+  if (normalized.includes("invalid template")) {
+    return "errors.templateInvalid";
+  }
+
+  return undefined;
+}
 
 function isLikelyI18nKey(value: string): boolean {
   return /^[a-z][a-z0-9_-]*(?:\.[a-zA-Z0-9_-]+)+$/.test(value);
@@ -29,6 +59,7 @@ function isLikelyI18nKey(value: string): boolean {
 
 export const useContainerStore = defineStore("containers", () => {
   const instances = ref<Instance[]>([]);
+  const wsConnected = ref(false);
   // 统一输出区支持纯文本和 i18n key 两种模式，视图层只负责渲染。
   const output = ref<string>("");
   const outputI18n = ref<OutputI18nPayload | null>(null);
@@ -65,7 +96,7 @@ export const useContainerStore = defineStore("containers", () => {
   function mapErrorToI18n(error: unknown): OutputI18nPayload {
     if (error instanceof ApiRequestError) {
       if (error.backendMessage) {
-        const mappedKey = backendMessageKeyMap[error.backendMessage.trim().toLowerCase()];
+        const mappedKey = mapBackendMessageToKey(error.backendMessage);
         if (mappedKey) {
           return { key: mappedKey };
         }
@@ -104,11 +135,34 @@ export const useContainerStore = defineStore("containers", () => {
     printI18n(key, values);
   }
 
+  // 保持列表顺序稳定：优先沿用当前显示顺序，新增项再按名称/ID 排序追加。
+  function normalizeInstances(nextInstances: Instance[]): Instance[] {
+    const currentOrder = new Map(instances.value.map((item, index) => [item.container_id, index]));
+    return [...nextInstances].sort((a, b) => {
+      const aIndex = currentOrder.get(a.container_id);
+      const bIndex = currentOrder.get(b.container_id);
+      if (typeof aIndex === "number" && typeof bIndex === "number") {
+        return aIndex - bIndex;
+      }
+      if (typeof aIndex === "number") {
+        return -1;
+      }
+      if (typeof bIndex === "number") {
+        return 1;
+      }
+      const nameOrder = a.name.localeCompare(b.name);
+      if (nameOrder !== 0) {
+        return nameOrder;
+      }
+      return a.container_id.localeCompare(b.container_id);
+    });
+  }
+
   // 同步后端实例列表到全局状态，返回值供视图层决定后续提示文案。
   async function fetchInstances(): Promise<boolean> {
     try {
       const data = await listInstances();
-      instances.value = data;
+      instances.value = normalizeInstances(data);
       return true;
     } catch (err) {
       printError(err);
@@ -116,10 +170,25 @@ export const useContainerStore = defineStore("containers", () => {
     }
   }
 
+  // WebSocket 推送的全量快照直接覆盖本地列表，避免再次触发 HTTP 拉取。
+  function applySnapshot(nextInstances: Instance[]): void {
+    instances.value = normalizeInstances(nextInstances);
+  }
+
+  function setWsConnected(connected: boolean): void {
+    wsConnected.value = connected;
+  }
+
   // 创建实例后立即刷新列表，避免视图层维护后端数据副本。
-  async function create(name: string): Promise<boolean> {
+  async function create(
+    name: string,
+    gameId: string,
+    params: Record<string, string> = {},
+    ports: PortMapping[] = [],
+    resources?: ResourceLimits,
+  ): Promise<boolean> {
     try {
-      const data = await apiCreate(name);
+      const data = await apiCreate(name, gameId, params, ports, resources);
       print(data);
       await fetchInstances();
       return true;
@@ -166,11 +235,14 @@ export const useContainerStore = defineStore("containers", () => {
 
   return {
     instances,
+    wsConnected,
     output,
     outputI18n,
     print,
     printError,
     printErrorKey,
+    applySnapshot,
+    setWsConnected,
     fetchInstances,
     create,
     remove,

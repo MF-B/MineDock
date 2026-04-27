@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -30,10 +31,35 @@ func main() {
 	}
 	defer sqliteStore.Close()
 
-	imageName := os.Getenv("MINEDOCK_IMAGE")
-	svc := service.NewDockerService(cli, sqliteStore, imageName)
+	gamesPath := os.Getenv("MINEDOCK_GAMES_PATH")
+	if gamesPath == "" {
+		gamesPath = "games.json"
+	}
+
+	templatesDir := os.Getenv("MINEDOCK_TEMPLATES_DIR")
+	if templatesDir == "" {
+		templatesDir = "templates"
+	}
+
+	gameSvc, err := service.NewGameService(gamesPath, templatesDir)
+	if err != nil {
+		log.Fatalf("init game service: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	svc := service.NewDockerService(cli, sqliteStore, gameSvc)
+	hub := service.NewEventHub(cli, svc.ListInstances)
+	go hub.Run(ctx)
+
 	h := api.NewHandler(svc)
-	router := api.NewRouter(h)
+	gameHandler := api.NewGameHandler(gameSvc)
+	wsHandler := api.NewWsHandler(hub)
+	consoleSvc := service.NewConsoleService(cli)
+	consoleHandler := api.NewConsoleHandler(consoleSvc)
+	configHandler := api.NewConfigHandler(svc)
+	router := api.NewRouter(h, gameHandler, wsHandler, consoleHandler, configHandler)
 
 	addr := ":8080"
 	log.Printf("MineDock backend listening on %s", addr)
