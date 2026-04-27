@@ -163,15 +163,19 @@ async function handleToggle(instance: {
   padding: 8px 16px;
   background-color: var(--create-brass-dark);
   color: var(--card-text);
-  border: none;
-  border-radius: 4px;
+  border: 2px solid var(--card-border);
+  border-radius: 0;
   font-size: 14px;
+  font-weight: bold;
   cursor: pointer;
+  box-shadow: 2px 2px 0 0 var(--create-border-outer);
   transition: all 0.2s ease;
 }
 
 .create-btn:hover {
-  filter: brightness(1.1);
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 0 var(--create-border-outer);
+  background-color: var(--create-brass-secondary);
 }
 
 .main-content {
@@ -196,8 +200,9 @@ async function handleToggle(instance: {
   text-align: center;
   color: var(--text-muted);
   padding: 40px;
-  border: 1px dashed var(--border-muted);
-  border-radius: 8px;
+  border: 2px dashed var(--border-muted);
+  border-radius: 0;
+  background: rgba(0, 0, 0, 0.2);
 }
 
 .card {
@@ -261,13 +266,17 @@ async function handleToggle(instance: {
   padding: 6px 16px;
   background-color: var(--danger-light);
   color: var(--danger);
-  border: 1px solid var(--danger);
-  border-radius: 4px;
+  border: 2px solid var(--danger);
+  border-radius: 0;
+  font-weight: bold;
   cursor: pointer;
+  box-shadow: 2px 2px 0 0 rgba(255, 77, 79, 0.5);
   transition: all 0.2s;
 }
 
 .delete-btn:hover {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 0 rgba(255, 77, 79, 0.5);
   background-color: var(--danger);
   color: var(--text-on-dark);
 }
@@ -321,10 +330,10 @@ input:checked + .slider:before {
 }
 
 .slider.round {
-  border-radius: 24px;
+  border-radius: 0;
 }
 .slider.round:before {
-  border-radius: 50%;
+  border-radius: 0;
 }
 
 /* ========== 底部输出 ========== */
@@ -333,8 +342,8 @@ input:checked + .slider:before {
   padding: 12px;
   background: var(--output-bg);
   color: var(--output-text);
-  border: 1px solid var(--output-border);
-  border-radius: 4px;
+  border: 3px solid var(--card-border);
+  border-radius: 0;
   min-height: 80px;
   max-height: 160px;
   overflow-y: auto;

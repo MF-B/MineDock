@@ -131,7 +131,20 @@ onUnmounted(() => {
 <template>
   <header class="page-header">
     <div class="header-left">
-      <button class="back-btn" @click="backToList">&lt;</button>
+      <button class="back-btn" title="Back" @click="backToList">
+        <svg
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="square"
+          stroke-linejoin="miter"
+        >
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+      </button>
     </div>
     <h1 class="page-title">{{ containerName }}</h1>
     <div class="header-right"></div>
@@ -214,17 +227,23 @@ onUnmounted(() => {
 }
 
 .back-btn {
-  border: 1px solid var(--create-border-outer);
-  background: rgba(0, 0, 0, 0.25);
-  color: var(--create-brass-primary);
+  border: 2px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--card-text);
   padding: 6px 12px;
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
-  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 2px 2px 0 0 var(--create-border-outer);
+  transition: all 0.2s ease;
 }
 
 .back-btn:hover {
-  background: rgba(0, 0, 0, 0.4);
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 0 var(--create-border-outer);
+  background: var(--hover-lighten);
 }
 
 .page-title {
@@ -247,63 +266,66 @@ onUnmounted(() => {
   padding: 8px 24px 24px;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  gap: 12px;
 }
 
 .tab-nav {
   display: flex;
   gap: 4px;
-  border-bottom: 2px solid var(--card-border-inner);
+  border-bottom: 3px solid var(--card-border);
   padding-bottom: 0;
   padding-left: 8px;
 }
 
 .tab-btn {
-  border: 2px solid transparent;
+  border: 3px solid var(--card-border);
   border-bottom: none;
-  border-radius: 6px 6px 0 0;
-  background: var(--create-bg-stripe);
-  color: var(--text-muted);
+  border-radius: 0;
+  background: var(--create-brass-dark);
+  color: var(--card-text);
   padding: 8px 18px;
   cursor: pointer;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: bold;
   transition: all 0.2s ease;
-  margin-bottom: -2px; /* overlap bottom border */
+  margin-bottom: -3px; /* overlap bottom border */
+  box-shadow: inset 0 -4px 0 0 rgba(0, 0, 0, 0.1);
 }
 
 .tab-btn:hover {
-  color: var(--card-text);
-  background: var(--card-border-inner);
+  background: var(--create-brass-secondary);
 }
 
 .tab-btn.is-active {
   color: var(--card-text);
-  border-color: var(--card-border-inner);
   background: var(--card-bg);
   box-shadow: none;
+  border-bottom: 3px solid var(--card-bg);
 }
 
 .tab-content {
   min-height: 0;
   flex: 1;
   background: var(--card-bg);
-  border: 2px solid var(--card-border-inner);
+  border: 3px solid var(--card-border);
   border-top: none;
-  border-radius: 0 6px 6px 6px;
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   padding: 16px;
-  box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow:
+    inset 0 3px 0 0 var(--card-bg),
+    inset 0 -3px 0 0 var(--card-bg),
+    inset 0 6px 0 0 var(--card-border-inner),
+    inset 0 -6px 0 0 var(--card-border-inner);
 }
 
 .terminal-panel {
   min-height: 0;
   flex: 1;
   position: relative;
-  border: 2px solid #000;
+  border: 3px solid var(--card-border);
   background: radial-gradient(circle at top, #213728, #090c0b);
-  border-radius: 4px;
+  border-radius: 0;
   overflow: hidden;
   box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8);
 }
@@ -325,15 +347,20 @@ onUnmounted(() => {
 }
 
 .status-bar {
-  border: 2px solid var(--card-border-inner);
+  border: 3px solid var(--card-border);
   background: var(--card-bg);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 10px 12px;
+  margin-top: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow:
+    inset 0 3px 0 0 var(--card-bg),
+    inset 0 -3px 0 0 var(--card-bg),
+    inset 0 6px 0 0 var(--card-border-inner),
+    inset 0 -6px 0 0 var(--card-border-inner);
 }
 
 .error-text {
@@ -343,13 +370,15 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .page-header {
-    padding: 0 80px 0 52px; /* 避开左边栏悬浮按钮和右边栏操作区 */
+    padding: 0 80px 0 64px;
     grid-template-columns: 1fr auto 1fr;
     height: var(--header-height);
   }
+}
 
+@media (max-width: 767px) {
   .main-content {
     padding: 8px 12px 12px;
   }
