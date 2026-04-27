@@ -123,12 +123,14 @@ function handleAction(action: string, file: FileItem) {
             <td colspan="4" class="empty-state">{{ $t("files.empty") }}</td>
           </tr>
           <tr v-for="file in files" :key="file.name" class="file-row" @dblclick="handleFileClick(file)">
-            <td class="col-name file-name-cell">
-              <span class="file-icon" :class="{ 'is-dir': file.isDir }">
-                <svg v-if="file.isDir" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-              </span>
-              <span class="file-name" @click="handleFileClick(file)">{{ file.name }}</span>
+            <td class="col-name">
+              <div class="file-name-cell">
+                <span class="file-icon" :class="{ 'is-dir': file.isDir }">
+                  <svg v-if="file.isDir" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                </span>
+                <span class="file-name" @click="handleFileClick(file)">{{ file.name }}</span>
+              </div>
             </td>
             <td class="col-size">{{ formatSize(file.size) }}</td>
             <td class="col-date">{{ formatDate(file.modifiedAt) }}</td>
@@ -155,9 +157,9 @@ function handleAction(action: string, file: FileItem) {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  border: 1px solid var(--create-border-outer);
+  border: 1px solid var(--card-border-inner);
   border-radius: 6px;
-  background: var(--bg-card);
+  background: #ffffff;
   overflow: hidden;
 }
 
@@ -166,8 +168,8 @@ function handleAction(action: string, file: FileItem) {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--create-border-outer);
-  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid var(--card-border-inner);
+  background: var(--card-bg);
 }
 
 .breadcrumbs {
@@ -178,23 +180,23 @@ function handleAction(action: string, file: FileItem) {
 }
 
 .breadcrumb-item {
-  color: var(--text-muted);
+  color: var(--card-text);
   cursor: pointer;
   transition: color 0.2s;
 }
 
 .breadcrumb-item:hover {
-  color: var(--create-brass-primary);
+  color: var(--create-border-outer);
 }
 
 .breadcrumb-item.active {
-  color: var(--create-brass-primary);
-  font-weight: 500;
+  color: var(--card-text);
+  font-weight: 600;
   cursor: default;
 }
 
 .breadcrumb-separator {
-  color: var(--create-border-outer);
+  color: var(--text-muted);
 }
 
 .actions {
@@ -203,9 +205,9 @@ function handleAction(action: string, file: FileItem) {
 }
 
 .action-btn {
-  border: 1px solid var(--create-border-outer);
-  background: transparent;
-  color: var(--text-regular);
+  border: 1px solid var(--card-border-inner);
+  background: #ffffff;
+  color: var(--card-text);
   padding: 6px 12px;
   border-radius: 4px;
   cursor: pointer;
@@ -214,20 +216,20 @@ function handleAction(action: string, file: FileItem) {
 }
 
 .action-btn:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--create-brass-primary);
-  border-color: var(--create-brass-primary);
+  background: #f0f0f0;
+  color: var(--card-text);
+  border-color: var(--card-border);
 }
 
 .action-btn.primary {
-  background: var(--create-brass-primary);
-  color: #000;
-  border-color: var(--create-brass-primary);
+  background: var(--create-brass-secondary);
+  color: var(--card-text);
+  border-color: var(--create-border-dark);
   font-weight: 500;
 }
 
 .action-btn.primary:hover {
-  background: #f0c070; /* slightly lighter brass */
+  background: var(--create-brass-primary);
 }
 
 .files-list-container {
@@ -240,26 +242,27 @@ function handleAction(action: string, file: FileItem) {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
+  table-layout: fixed;
 }
 
 .files-table th {
   position: sticky;
   top: 0;
-  background: var(--bg-card);
+  background: var(--card-bg);
   padding: 12px 16px;
   font-size: 12px;
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
   text-transform: uppercase;
-  border-bottom: 1px solid var(--create-border-outer);
+  border-bottom: 1px solid var(--card-border-inner);
   z-index: 1;
 }
 
 .files-table td {
   padding: 10px 16px;
-  border-bottom: 1px solid var(--create-border-outer);
+  border-bottom: 1px solid var(--card-border-inner);
   font-size: 14px;
-  color: var(--text-regular);
+  color: var(--card-text);
 }
 
 .file-row {
@@ -267,23 +270,25 @@ function handleAction(action: string, file: FileItem) {
 }
 
 .file-row:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .col-name {
-  width: 50%;
+  width: 100%;
 }
 
 .col-size {
-  width: 15%;
+  width: 120px;
+  text-align: right;
 }
 
 .col-date {
-  width: 20%;
+  width: 180px;
+  text-align: right;
 }
 
 .col-actions {
-  width: 15%;
+  width: 100px;
   text-align: right;
 }
 
@@ -303,7 +308,7 @@ function handleAction(action: string, file: FileItem) {
 }
 
 .file-icon.is-dir {
-  color: var(--create-brass-primary);
+  color: var(--create-border-outer);
 }
 
 .icon {
@@ -314,10 +319,13 @@ function handleAction(action: string, file: FileItem) {
 .file-name {
   cursor: pointer;
   user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .file-name:hover {
-  color: var(--create-brass-primary);
+  color: var(--create-border-outer);
   text-decoration: underline;
 }
 
@@ -349,14 +357,14 @@ function handleAction(action: string, file: FileItem) {
 }
 
 .icon-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text-regular);
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--card-text);
 }
 
 .icon-btn.danger:hover {
-  background: rgba(220, 53, 69, 0.15);
+  background: rgba(220, 53, 69, 0.1);
   color: var(--danger);
-  border-color: rgba(220, 53, 69, 0.3);
+  border-color: rgba(220, 53, 69, 0.2);
 }
 
 .empty-state {

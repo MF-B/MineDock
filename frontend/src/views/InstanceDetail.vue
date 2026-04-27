@@ -248,47 +248,60 @@ onUnmounted(() => {
 
 .tab-nav {
   display: flex;
-  gap: 8px;
-  border-bottom: 1px solid var(--create-border-outer);
-  padding-bottom: 2px;
+  gap: 4px;
+  border-bottom: 2px solid var(--card-border-inner);
+  padding-bottom: 0;
+  padding-left: 8px;
 }
 
 .tab-btn {
-  border: 1px solid transparent;
+  border: 2px solid transparent;
+  border-bottom: none;
   border-radius: 6px 6px 0 0;
-  background: transparent;
+  background: var(--create-bg-stripe);
   color: var(--text-muted);
-  padding: 8px 14px;
+  padding: 8px 18px;
   cursor: pointer;
   font-size: 13px;
+  font-weight: 500;
   transition: all 0.2s ease;
+  margin-bottom: -2px; /* overlap bottom border */
 }
 
 .tab-btn:hover {
-  color: var(--create-brass-primary);
-  background: rgba(0, 0, 0, 0.2);
+  color: var(--card-text);
+  background: var(--card-border-inner);
 }
 
 .tab-btn.is-active {
-  color: var(--create-brass-primary);
-  border-color: var(--create-border-outer);
-  border-bottom-color: transparent;
-  background: rgba(0, 0, 0, 0.3);
-  box-shadow: inset 0 -2px 0 var(--create-brass-primary);
+  color: var(--card-text);
+  border-color: var(--card-border-inner);
+  background: var(--card-bg);
+  box-shadow: none;
 }
 
 .tab-content {
   min-height: 0;
+  flex: 1;
+  background: var(--card-bg);
+  border: 2px solid var(--card-border-inner);
+  border-top: none;
+  border-radius: 0 6px 6px 6px;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  box-shadow: 4px 4px 12px rgba(0,0,0,0.3);
 }
 
 .terminal-panel {
   min-height: 0;
-  height: 100%;
+  flex: 1;
   position: relative;
-  border: 1px solid var(--create-border-outer);
-  background: radial-gradient(circle at top, rgba(33, 55, 40, 0.9), rgba(9, 12, 11, 0.95));
-  border-radius: 6px;
+  border: 2px solid #000;
+  background: radial-gradient(circle at top, #213728, #090c0b);
+  border-radius: 4px;
   overflow: hidden;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
 }
 
 .terminal-host {
@@ -308,20 +321,22 @@ onUnmounted(() => {
 }
 
 .status-bar {
-  border: 1px solid var(--create-border-outer);
-  background: rgba(0, 0, 0, 0.28);
+  border: 2px solid var(--card-border-inner);
+  background: var(--card-bg);
   border-radius: 6px;
   padding: 10px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  box-shadow: 4px 4px 12px rgba(0,0,0,0.3);
 }
 
 .error-text {
   color: var(--danger);
   font-size: 13px;
   text-align: right;
+  font-weight: 500;
 }
 
 @media (max-width: 767px) {
