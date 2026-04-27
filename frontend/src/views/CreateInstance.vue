@@ -6,9 +6,6 @@ import type { GameTemplate, PortMapping, ResourceLimits, TemplateParam } from ".
 import { useGameStore } from "../stores/games";
 import { useContainerStore } from "../stores/containers";
 
-type ResourceUnit = "g" | "m";
-type ResourcePreset = "conservative" | "recommended" | "highPerformance";
-
 const route = useRoute();
 const router = useRouter();
 const { t } = useI18n();
@@ -23,9 +20,7 @@ const pageErrorKey = ref("");
 const ports = ref<PortMapping[]>([]);
 const paramValues = ref<Record<string, string>>({});
 const resourceEnabled = ref(false);
-const selectedResourcePreset = ref<ResourcePreset>("recommended");
 const resourceMemoryValue = ref(0);
-const resourceMemoryUnit = ref<ResourceUnit>("g");
 const resourceCPUValue = ref(0);
 
 const currentGame = computed(() => {
@@ -64,9 +59,7 @@ async function initializeForRoute(): Promise<void> {
   ports.value = [];
   paramValues.value = {};
   resourceEnabled.value = false;
-  selectedResourcePreset.value = "recommended";
   resourceMemoryValue.value = 0;
-  resourceMemoryUnit.value = "g";
   resourceCPUValue.value = 0;
 
   const gameID = parseRouteGameID(route.params.gameId);
@@ -186,14 +179,7 @@ function getTemplateResourceBase(
 }
 
 function setResourceInputs(memoryMB: number, cpu: number): void {
-  const normalizedMemory = roundFloat(memoryMB, 2);
-  if (normalizedMemory >= 1024) {
-    resourceMemoryUnit.value = "g";
-    resourceMemoryValue.value = roundFloat(normalizedMemory / 1024, 2);
-  } else {
-    resourceMemoryUnit.value = "m";
-    resourceMemoryValue.value = roundFloat(normalizedMemory, 2);
-  }
+  resourceMemoryValue.value = roundFloat(memoryMB / 1024, 2);
   resourceCPUValue.value = roundFloat(cpu, 2);
 }
 
@@ -201,39 +187,13 @@ function initializeResourcesFromTemplate(template: GameTemplate | null): void {
   const base = getTemplateResourceBase(template);
   if (!base) {
     resourceEnabled.value = false;
-    selectedResourcePreset.value = "recommended";
     resourceMemoryValue.value = 0;
-    resourceMemoryUnit.value = "g";
     resourceCPUValue.value = 0;
     return;
   }
 
   resourceEnabled.value = true;
-  selectedResourcePreset.value = "recommended";
   setResourceInputs(base.memoryMB, base.cpu);
-}
-
-function applyResourcePreset(preset: ResourcePreset): void {
-  const base = getTemplateResourceBase(currentTemplate.value);
-  if (!base) {
-    return;
-  }
-
-  selectedResourcePreset.value = preset;
-
-  if (preset === "recommended") {
-    setResourceInputs(base.memoryMB, base.cpu);
-    return;
-  }
-  if (preset === "conservative") {
-    setResourceInputs(base.memoryMB * 0.75, Math.max(0.5, base.cpu - 0.5));
-    return;
-  }
-  setResourceInputs(base.memoryMB * 1.25, base.cpu + 1);
-}
-
-function markResourceAsCustom(): void {
-  selectedResourcePreset.value = "recommended";
 }
 
 function getDefaultParamValue(param: TemplateParam): string {
@@ -289,7 +249,7 @@ function getCreateResourcesPayload(): ResourceLimits | undefined {
 
   const memoryValue = Number(resourceMemoryValue.value);
   const cpuValue = Number(resourceCPUValue.value);
-  const memory = `${formatNumber(memoryValue)}${resourceMemoryUnit.value}`;
+  const memory = `${formatNumber(memoryValue)}g`;
 
   return {
     memory,
@@ -428,74 +388,34 @@ async function handleCreate(): Promise<void> {
         <h3 class="section-title">{{ $t("createPage.resourcesTitle") }}</h3>
 
         <div v-if="resourceEnabled" class="resource-block">
-          <div class="preset-buttons">
-            <button
-              class="preset-btn"
-              :class="{ 'is-active': selectedResourcePreset === 'conservative' }"
-              type="button"
-              @click="applyResourcePreset('conservative')"
-            >
-              {{ $t("createPage.resourcePresetConservative") }}
-            </button>
-            <button
-              class="preset-btn"
-              :class="{ 'is-active': selectedResourcePreset === 'recommended' }"
-              type="button"
-              @click="applyResourcePreset('recommended')"
-            >
-              {{ $t("createPage.resourcePresetRecommended") }}
-            </button>
-            <button
-              class="preset-btn"
-              :class="{ 'is-active': selectedResourcePreset === 'highPerformance' }"
-              type="button"
-              @click="applyResourcePreset('highPerformance')"
-            >
-              {{ $t("createPage.resourcePresetHighPerformance") }}
-            </button>
-          </div>
-
-          <div class="resource-grid">
-            <article class="param-item">
-              <label class="field-label" for="resource-memory">{{
-                $t("createPage.memoryLabel")
-              }}</label>
-              <div class="resource-input-row">
-                <input
-                  id="resource-memory"
-                  v-model.number="resourceMemoryValue"
-                  class="text-input"
-                  type="number"
-                  min="0.25"
-                  step="0.25"
-                  @input="markResourceAsCustom"
-                />
-                <select
-                  v-model="resourceMemoryUnit"
-                  class="text-input resource-unit-select"
-                  @change="markResourceAsCustom"
-                >
-                  <option value="g">GB</option>
-                  <option value="m">MB</option>
-                </select>
-              </div>
-            </article>
-
-            <article class="param-item">
-              <label class="field-label" for="resource-cpu">{{ $t("createPage.cpuLabel") }}</label>
+          <article class="param-item">
+            <label class="field-label" for="resource-memory">{{
+              $t("createPage.memoryLabel")
+            }}</label>
+            <div class="resource-input-row">
               <input
-                id="resource-cpu"
-                v-model.number="resourceCPUValue"
-                class="text-input"
+                id="resource-memory"
+                v-model.number="resourceMemoryValue"
+                class="text-input resource-number-input"
                 type="number"
-                min="0.5"
-                step="0.1"
-                @input="markResourceAsCustom"
+                min="0.25"
+                step="0.25"
               />
-            </article>
-          </div>
+              <span class="resource-unit-badge">GB</span>
+            </div>
 
-          <p class="field-hint">{{ $t("createPage.resourcesHint") }}</p>
+            <label class="field-label" for="resource-cpu">{{ $t("createPage.cpuLabel") }}</label>
+            <input
+              id="resource-cpu"
+              v-model.number="resourceCPUValue"
+              class="text-input resource-number-input"
+              type="number"
+              min="0.5"
+              step="0.1"
+            />
+
+            <p class="field-hint">{{ $t("createPage.resourcesHint") }}</p>
+          </article>
         </div>
 
         <div v-else class="state-message compact">
@@ -671,42 +591,37 @@ async function handleCreate(): Promise<void> {
   gap: 10px;
 }
 
-.preset-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.preset-btn {
-  padding: 6px 10px;
-  border: 1px solid var(--create-border-outer);
-  background: rgba(0, 0, 0, 0.16);
-  color: var(--text-on-dark);
-  border-radius: 6px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.preset-btn.is-active {
-  background: var(--create-brass-dark);
-  border-color: var(--create-brass-primary);
-}
-
-.resource-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
 .resource-input-row {
   display: flex;
   gap: 8px;
   align-items: center;
 }
 
-.resource-unit-select {
+.resource-unit-badge {
+  min-width: 64px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text-on-dark);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
   width: 100px;
   flex-shrink: 0;
+}
+
+.resource-number-input {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.resource-number-input::-webkit-outer-spin-button,
+.resource-number-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .param-item {

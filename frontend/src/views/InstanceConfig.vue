@@ -12,8 +12,6 @@ import {
   updateInstanceConfig,
 } from "../api/index";
 
-type ResourceUnit = "g" | "m";
-
 const props = defineProps<{ containerId: string }>();
 
 const emit = defineEmits<{
@@ -32,7 +30,6 @@ const ports = ref<PortMapping[]>([]);
 const values = ref<Record<string, string>>({});
 const resourceEnabled = ref(false);
 const resourceMemoryValue = ref(0);
-const resourceMemoryUnit = ref<ResourceUnit>("g");
 const resourceCPUValue = ref(0);
 
 const isRunning = computed(() => {
@@ -160,15 +157,7 @@ function parseMemoryToMB(raw: string): number | null {
 }
 
 function setResourceInputs(memoryMB: number, cpu: number): void {
-  const normalized = roundFloat(memoryMB, 2);
-  if (normalized >= 1024) {
-    resourceMemoryUnit.value = "g";
-    resourceMemoryValue.value = roundFloat(normalized / 1024, 2);
-  } else {
-    resourceMemoryUnit.value = "m";
-    resourceMemoryValue.value = roundFloat(normalized, 2);
-  }
-
+  resourceMemoryValue.value = roundFloat(memoryMB / 1024, 2);
   resourceCPUValue.value = roundFloat(cpu, 2);
 }
 
@@ -180,7 +169,6 @@ function initializeResources(
   if (!source) {
     resourceEnabled.value = false;
     resourceMemoryValue.value = 0;
-    resourceMemoryUnit.value = "g";
     resourceCPUValue.value = 0;
     return;
   }
@@ -190,7 +178,6 @@ function initializeResources(
   if (memoryMB == null || memoryMB <= 0 || !Number.isFinite(cpu) || cpu <= 0) {
     resourceEnabled.value = false;
     resourceMemoryValue.value = 0;
-    resourceMemoryUnit.value = "g";
     resourceCPUValue.value = 0;
     return;
   }
@@ -242,7 +229,7 @@ function buildResourcesPayload(): ResourceLimits | undefined {
   const cpuValue = Number(resourceCPUValue.value);
 
   return {
-    memory: `${formatNumber(memoryValue)}${resourceMemoryUnit.value}`,
+    memory: `${formatNumber(memoryValue)}g`,
     cpu: roundFloat(cpuValue, 2),
   };
 }
@@ -278,7 +265,6 @@ async function loadConfig(): Promise<void> {
   values.value = {};
   resourceEnabled.value = false;
   resourceMemoryValue.value = 0;
-  resourceMemoryUnit.value = "g";
   resourceCPUValue.value = 0;
 
   const id = props.containerId.trim();
@@ -406,27 +392,20 @@ async function handleSave(): Promise<void> {
             <input
               id="cfg-memory"
               v-model.number="resourceMemoryValue"
-              class="text-input"
+              class="text-input resource-number-input"
               type="number"
               min="0.25"
               step="0.25"
               :disabled="!editable"
             />
-            <select
-              v-model="resourceMemoryUnit"
-              class="text-input resource-unit-select"
-              :disabled="!editable"
-            >
-              <option value="g">GB</option>
-              <option value="m">MB</option>
-            </select>
+            <span class="resource-unit-badge">GB</span>
           </div>
 
           <label class="field-label" for="cfg-cpu">{{ $t("config.cpuLabel") }}</label>
           <input
             id="cfg-cpu"
             v-model.number="resourceCPUValue"
-            class="text-input"
+            class="text-input resource-number-input"
             type="number"
             min="0.5"
             step="0.1"
@@ -679,8 +658,30 @@ async function handleSave(): Promise<void> {
   align-items: center;
 }
 
-.resource-unit-select {
+.resource-unit-badge {
+  min-width: 64px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text-on-dark);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
   width: 100px;
   flex-shrink: 0;
+}
+
+.resource-number-input {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.resource-number-input::-webkit-outer-spin-button,
+.resource-number-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 </style>
