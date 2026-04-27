@@ -20,7 +20,8 @@
   },
   "tabs": {
     "console": "控制台",
-    "config": "配置"
+    "config": "配置",
+    "files": "文件"
   },
   "config": {
     "title": "服务器配置",
@@ -39,6 +40,22 @@
     "mustStopFirst": "需要先停止容器才能修改配置。",
     "noTemplate": "无法加载模板信息。",
     "restartNote": "保存后请手动启动容器使配置生效。"
+  },
+  "files": {
+    "root": "根目录",
+    "empty": "此文件夹为空。",
+    "columns": {
+      "name": "名称",
+      "size": "大小",
+      "modified": "修改时间",
+      "actions": "操作"
+    },
+    "actions": {
+      "newFolder": "新建文件夹",
+      "upload": "上传文件",
+      "download": "下载",
+      "delete": "删除"
+    }
   },
   "createModal": {
     "title": "新建容器",

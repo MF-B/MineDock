@@ -20,7 +20,8 @@
   },
   "tabs": {
     "console": "Console",
-    "config": "Config"
+    "config": "Config",
+    "files": "Files"
   },
   "config": {
     "title": "Server Config",
@@ -39,6 +40,22 @@
     "mustStopFirst": "Stop the container before editing config.",
     "noTemplate": "Unable to load template details.",
     "restartNote": "Start the container manually after saving to apply changes."
+  },
+  "files": {
+    "root": "Root",
+    "empty": "This folder is empty.",
+    "columns": {
+      "name": "Name",
+      "size": "Size",
+      "modified": "Modified",
+      "actions": "Actions"
+    },
+    "actions": {
+      "newFolder": "New Folder",
+      "upload": "Upload File",
+      "download": "Download",
+      "delete": "Delete"
+    }
   },
   "createModal": {
     "title": "New Container",
