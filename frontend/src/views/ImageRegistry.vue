@@ -1,43 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { useI18n } from "vue-i18n";
 import type { Game } from "../api/index";
 import { useGameStore } from "../stores/games";
 
 const router = useRouter();
-const { t } = useI18n();
 const gameStore = useGameStore();
-
-const ALL_CATEGORY = "__all__";
-
-const iconEmojiMap: Record<string, string> = {
-  "minecraft-java": "\u26CF\uFE0F",
-  "minecraft-bedrock": "\u26CF\uFE0F",
-  terraria: "\uD83C\uDF33",
-};
-
-const selectedCategory = ref(ALL_CATEGORY);
-
-const categoryTabs = computed(() => {
-  return [
-    { key: ALL_CATEGORY, label: t("registry.filterAll") },
-    ...gameStore.categories.map((category) => ({ key: category, label: category })),
-  ];
-});
-
-const filteredGames = computed(() => {
-  if (selectedCategory.value === ALL_CATEGORY) {
-    return gameStore.games;
-  }
-  return gameStore.games.filter((game) => game.category === selectedCategory.value);
-});
-
-watch(categoryTabs, (tabs) => {
-  if (!tabs.some((tab) => tab.key === selectedCategory.value)) {
-    selectedCategory.value = ALL_CATEGORY;
-  }
-});
 
 onMounted(() => {
   void loadGames();
@@ -50,6 +18,12 @@ async function loadGames(): Promise<void> {
     // error state is captured by game store and rendered by the view.
   }
 }
+
+const iconEmojiMap: Record<string, string> = {
+  "minecraft-java": "\u26CF\uFE0F",
+  "minecraft-bedrock": "\u26CF\uFE0F",
+  terraria: "\uD83C\uDF33",
+};
 
 function getGameEmoji(game: Game): string {
   const mapped = iconEmojiMap[game.icon];
@@ -74,21 +48,6 @@ function goToCreatePage(gameID: string): void {
   </header>
 
   <main class="main-content">
-    <div class="filter-tabs" role="tablist" aria-label="Category filter">
-      <button
-        v-for="tab in categoryTabs"
-        :key="tab.key"
-        class="filter-tab"
-        :class="{ 'is-active': selectedCategory === tab.key }"
-        type="button"
-        role="tab"
-        :aria-selected="selectedCategory === tab.key"
-        @click="selectedCategory = tab.key"
-      >
-        {{ tab.label }}
-      </button>
-    </div>
-
     <div v-if="gameStore.loading && gameStore.games.length === 0" class="state-message">
       {{ $t("registry.loading") }}
     </div>
@@ -98,12 +57,12 @@ function goToCreatePage(gameID: string): void {
     >
       {{ $t("registry.loadError") }}
     </div>
-    <div v-else-if="filteredGames.length === 0" class="state-message">
+    <div v-else-if="gameStore.games.length === 0" class="state-message">
       {{ $t("registry.emptyState") }}
     </div>
     <section v-else class="game-grid">
       <button
-        v-for="game in filteredGames"
+        v-for="game in gameStore.games"
         :key="game.id"
         class="game-card"
         type="button"
@@ -145,33 +104,6 @@ function goToCreatePage(gameID: string): void {
   margin: 0 auto;
   width: 100%;
   gap: 16px;
-}
-
-.filter-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.filter-tab {
-  border: 1px solid var(--create-border-outer);
-  background: rgba(0, 0, 0, 0.15);
-  color: var(--create-brass-primary);
-  padding: 6px 14px;
-  border-radius: 999px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s ease;
-}
-
-.filter-tab:hover {
-  background: rgba(0, 0, 0, 0.3);
-}
-
-.filter-tab.is-active {
-  background: var(--create-brass-dark);
-  color: var(--card-text);
-  border-color: var(--create-brass-secondary);
 }
 
 .state-message {

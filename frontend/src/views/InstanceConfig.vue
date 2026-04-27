@@ -571,20 +571,20 @@ async function handleSave(): Promise<void> {
 }
 
 .port-item {
-  border: 1px solid var(--card-border-inner);
-  border-radius: 6px;
-  padding: 12px;
-  background: transparent;
+  border: 2px solid var(--card-border-inner);
+  border-radius: 0;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.03);
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
 .param-item {
-  border: 1px solid var(--card-border-inner);
-  border-radius: 6px;
-  padding: 12px;
-  background: transparent;
+  border: 2px solid var(--card-border-inner);
+  border-radius: 0;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.03);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -608,15 +608,16 @@ async function handleSave(): Promise<void> {
 .text-input {
   padding: 8px 10px;
   background: #ffffff;
-  border: 1px solid var(--card-border-inner);
+  border: 2px solid var(--card-border);
   color: var(--card-text);
-  border-radius: 4px;
+  border-radius: 0;
   outline: none;
   width: 100%;
+  box-shadow: inset 2px 2px 0 0 rgba(0, 0, 0, 0.1);
 }
 
 .text-input:focus {
-  border-color: var(--card-border);
+  border-color: var(--create-border-outer);
 }
 
 .boolean-field {
@@ -635,23 +636,28 @@ async function handleSave(): Promise<void> {
 
 .save-btn {
   padding: 8px 16px;
-  border: 1px solid var(--create-border-dark);
-  background: var(--create-brass-secondary);
-  color: var(--card-text);
-  border-radius: 4px;
-  cursor: pointer;
   font-size: 13px;
-  font-weight: 600;
-  transition: all 0.2s;
+  background: var(--success);
+  color: #fff;
+  border: 2px solid var(--card-border);
+  border-radius: 0;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 0 var(--create-border-outer);
+  transition: all 0.2s ease;
+  font-weight: bold;
 }
 
 .save-btn:hover:not(:disabled) {
-  background: var(--create-brass-primary);
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 0 var(--create-border-outer);
+  filter: brightness(1.1);
 }
 
 .save-btn:disabled {
+  opacity: 0.55;
   cursor: not-allowed;
-  opacity: 0.6;
+  transform: none;
+  box-shadow: 2px 2px 0 0 var(--create-border-outer);
 }
 
 .save-success {
@@ -676,16 +682,18 @@ async function handleSave(): Promise<void> {
   min-width: 64px;
   height: 34px;
   padding: 0 10px;
-  border: 1px solid var(--card-border-inner);
-  border-radius: 4px;
-  background: #f0f0f0;
+  border: 2px solid var(--card-border);
+  border-radius: 0;
+  background: var(--create-brass-dark);
   color: var(--card-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
+  font-weight: bold;
   width: 100px;
   flex-shrink: 0;
+  box-shadow: 2px 2px 0 0 var(--create-border-outer);
 }
 
 .resource-number-input {

@@ -91,7 +91,7 @@ onUnmounted(() => {
   height: var(--header-height);
   --top-actions-gap: 10px;
   --topbar-sync-dot-size: 10px;
-  --topbar-sync-dot-radius: 999px;
+  --topbar-sync-dot-radius: 0px;
   pointer-events: none; /* Let clicks pass through */
   display: flex;
   justify-content: flex-end;
@@ -137,7 +137,7 @@ onUnmounted(() => {
   opacity: 0.8;
   cursor: pointer;
   padding: 8px;
-  border-radius: 4px;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -154,11 +154,11 @@ onUnmounted(() => {
   top: 100%;
   right: 0;
   margin-top: 4px;
-  background-color: var(--create-bg);
-  border: 1px solid var(--create-border-outer);
-  border-radius: 4px;
+  background-color: var(--card-bg);
+  border: 2px solid var(--card-border);
+  border-radius: 0;
   min-width: 120px;
-  box-shadow: 0 4px 6px var(--shadow-light);
+  box-shadow: 2px 2px 0 0 var(--create-border-outer);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -181,8 +181,8 @@ onUnmounted(() => {
 }
 
 .dropdown-item.active {
-  background-color: transparent;
-  color: var(--text-on-dark);
+  background-color: var(--card-bg);
+  color: var(--card-text);
   font-weight: normal;
 }
 </style>

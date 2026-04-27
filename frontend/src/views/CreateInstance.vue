@@ -529,13 +529,32 @@ async function handleCreate(): Promise<void> {
 }
 
 .form-panel {
-  border: 1px solid var(--create-border-outer);
-  background: rgba(0, 0, 0, 0.18);
-  border-radius: 8px;
+  background: var(--card-bg);
+  border: 3px solid var(--card-border);
+  border-radius: 0;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  box-shadow:
+    inset 0 3px 0 0 var(--card-bg),
+    inset 0 -3px 0 0 var(--card-bg),
+    inset 0 6px 0 0 var(--card-border-inner),
+    inset 0 -6px 0 0 var(--card-border-inner);
+  clip-path: polygon(
+    0 3px,
+    3px 3px,
+    3px 0,
+    calc(100% - 3px) 0,
+    calc(100% - 3px) 3px,
+    100% 3px,
+    100% calc(100% - 3px),
+    calc(100% - 3px) calc(100% - 3px),
+    calc(100% - 3px) 100%,
+    3px 100%,
+    3px calc(100% - 3px),
+    0 calc(100% - 3px)
+  );
 }
 
 .form-header {
@@ -545,13 +564,13 @@ async function handleCreate(): Promise<void> {
 
 .game-title {
   margin: 0;
-  color: var(--create-brass-primary);
+  color: var(--card-text);
   font-size: 20px;
 }
 
 .game-description {
   margin: 8px 0 0;
-  color: var(--text-muted);
+  color: #3b3b3b;
   line-height: 1.5;
   font-size: 13px;
 }
@@ -564,19 +583,22 @@ async function handleCreate(): Promise<void> {
 
 .field-label {
   font-size: 13px;
-  color: var(--text-on-dark);
+  color: var(--card-text);
+  font-weight: 600;
 }
 
 .field-hint {
   margin: 0;
   font-size: 12px;
-  color: var(--text-muted);
+  color: #555555;
 }
 
 .section-title {
   margin: 0;
   font-size: 15px;
-  color: var(--create-brass-primary);
+  color: var(--card-text);
+  border-bottom: 2px solid var(--card-border-inner);
+  padding-bottom: 4px;
 }
 
 .param-list {
@@ -601,16 +623,18 @@ async function handleCreate(): Promise<void> {
   min-width: 64px;
   height: 34px;
   padding: 0 10px;
-  border: 1px solid var(--input-border);
-  border-radius: 4px;
-  background: var(--input-bg);
-  color: var(--text-on-dark);
+  border: 2px solid var(--card-border);
+  border-radius: 0;
+  background: var(--create-brass-dark);
+  color: var(--card-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
+  font-weight: bold;
   width: 100px;
   flex-shrink: 0;
+  box-shadow: 2px 2px 0 0 var(--create-border-outer);
 }
 
 .resource-number-input {
@@ -625,10 +649,10 @@ async function handleCreate(): Promise<void> {
 }
 
 .param-item {
-  border: 1px solid var(--create-border-outer);
-  border-radius: 6px;
+  border: 2px solid var(--card-border-inner);
+  border-radius: 0;
   padding: 10px;
-  background: rgba(0, 0, 0, 0.14);
+  background: rgba(0, 0, 0, 0.03);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -636,16 +660,17 @@ async function handleCreate(): Promise<void> {
 
 .text-input {
   padding: 8px 10px;
-  background: var(--input-bg);
-  border: 1px solid var(--input-border);
-  color: var(--text-on-dark);
-  border-radius: 4px;
+  background: #ffffff;
+  border: 2px solid var(--card-border);
+  color: var(--card-text);
+  border-radius: 0;
   outline: none;
   width: 100%;
+  box-shadow: inset 2px 2px 0 0 rgba(0, 0, 0, 0.1);
 }
 
 .text-input:focus {
-  border-color: var(--create-brass-primary);
+  border-color: var(--create-border-outer);
 }
 
 .boolean-field {
@@ -653,7 +678,7 @@ async function handleCreate(): Promise<void> {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: var(--text-on-dark);
+  color: var(--card-text);
 }
 
 .actions {
@@ -666,42 +691,55 @@ async function handleCreate(): Promise<void> {
 .btn-cancel {
   padding: 8px 14px;
   font-size: 13px;
-  background: transparent;
-  border: 1px solid var(--btn-secondary-border);
-  color: var(--btn-secondary-text);
-  border-radius: 4px;
+  background: var(--card-bg);
+  border: 2px solid var(--card-border);
+  color: var(--card-text);
+  border-radius: 0;
   cursor: pointer;
+  box-shadow: 2px 2px 0 0 var(--create-border-outer);
+  transition: all 0.2s ease;
+  font-weight: bold;
 }
 
 .btn-cancel:hover {
-  background: var(--hover-lighten);
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 0 var(--create-border-outer);
+  background: var(--create-brass-dark);
 }
 
 .btn-confirm {
   padding: 8px 14px;
   font-size: 13px;
-  background: var(--create-brass-dark);
-  color: var(--text-on-dark);
-  border: none;
-  border-radius: 4px;
+  background: var(--success);
+  color: #fff;
+  border: 2px solid var(--card-border);
+  border-radius: 0;
   cursor: pointer;
+  box-shadow: 2px 2px 0 0 var(--create-border-outer);
+  transition: all 0.2s ease;
+  font-weight: bold;
 }
 
 .btn-confirm:hover {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 0 var(--create-border-outer);
   filter: brightness(1.1);
 }
 
 .btn-confirm:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: 2px 2px 0 0 var(--create-border-outer);
 }
 
 .state-message {
   text-align: center;
   color: var(--text-muted);
-  border: 1px dashed var(--border-muted);
-  border-radius: 8px;
+  border: 2px dashed var(--border-muted);
+  border-radius: 0;
   padding: 40px 16px;
+  background: rgba(0, 0, 0, 0.2);
 }
 
 .state-message.compact {

@@ -233,8 +233,8 @@ function handleAction(action: string, file: FileItem) {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  border: 1px solid var(--card-border-inner);
-  border-radius: 6px;
+  border: 2px solid var(--card-border-inner);
+  border-radius: 0;
   background: #ffffff;
   overflow: hidden;
 }
@@ -244,7 +244,7 @@ function handleAction(action: string, file: FileItem) {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--card-border-inner);
+  border-bottom: 2px solid var(--card-border-inner);
   background: var(--card-bg);
 }
 
@@ -281,31 +281,32 @@ function handleAction(action: string, file: FileItem) {
 }
 
 .action-btn {
-  border: 1px solid var(--card-border-inner);
-  background: #ffffff;
+  border: 2px solid var(--card-border);
+  background: var(--card-bg);
   color: var(--card-text);
   padding: 6px 12px;
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
   font-size: 13px;
+  font-weight: bold;
+  box-shadow: 2px 2px 0 0 var(--create-border-outer);
   transition: all 0.2s;
 }
 
 .action-btn:hover {
-  background: #f0f0f0;
-  color: var(--card-text);
-  border-color: var(--card-border);
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 0 var(--create-border-outer);
+  background: var(--create-brass-dark);
 }
 
 .action-btn.primary {
-  background: var(--create-brass-secondary);
-  color: var(--card-text);
-  border-color: var(--create-border-dark);
-  font-weight: 500;
+  background: var(--success);
+  color: #fff;
 }
 
 .action-btn.primary:hover {
-  background: var(--create-brass-primary);
+  background: var(--success);
+  filter: brightness(1.1);
 }
 
 .files-list-container {
@@ -328,9 +329,9 @@ function handleAction(action: string, file: FileItem) {
   padding: 12px 16px;
   font-size: 12px;
   color: var(--text-muted);
-  font-weight: 600;
+  font-weight: bold;
   text-transform: uppercase;
-  border-bottom: 1px solid var(--card-border-inner);
+  border-bottom: 2px solid var(--card-border-inner);
   z-index: 1;
 }
 
@@ -419,11 +420,11 @@ function handleAction(action: string, file: FileItem) {
 
 .icon-btn {
   background: transparent;
-  border: 1px solid transparent;
+  border: 2px solid transparent;
   color: var(--text-muted);
   width: 28px;
   height: 28px;
-  border-radius: 4px;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
