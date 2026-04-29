@@ -1,55 +1,47 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { getServerMetrics, type ServerMetrics } from "../api/index";
+
+interface DiskMetricSample {
+  id: string;
+  label: string;
+  name: string;
+  percent: number;
+  usedGb: number;
+  totalGb: number;
+  readMbps: number;
+  writeMbps: number;
+}
 
 interface ServerMetricSample {
   timestamp: number;
   cpuPercent: number;
   cpuCores: number[];
+  logicalCores?: number;
+  cpuModel?: string;
   memoryPercent: number;
+  memoryUsedGb?: number;
+  memoryTotalGb?: number;
   memoryInMbps: number;
   memoryOutMbps: number;
+  memoryModel?: string;
+  disks?: DiskMetricSample[];
   diskPercent: number;
   diskReadMbps: number;
   diskWriteMbps: number;
   networkRxMbps: number;
   networkTxMbps: number;
+  networkModel?: string;
 }
 
-type MetricPanel = "cpu" | "memory" | "network" | `disk-${number}`;
-type MetricValueKey =
-  | "memoryInMbps"
-  | "memoryOutMbps"
-  | "diskReadMbps"
-  | "diskWriteMbps"
-  | "networkRxMbps"
-  | "networkTxMbps";
+type MetricPanel = "cpu" | "memory" | "network" | `disk-${string}`;
+type MetricValueKey = "memoryInMbps" | "memoryOutMbps" | "networkRxMbps" | "networkTxMbps";
 
 const MAX_SAMPLES = 60;
-const CPU_CORE_COUNT = 8;
+const BYTES_PER_GIB = 1024 ** 3;
+const BYTES_PER_MIB = 1024 ** 2;
 const CHART_TOP = 4;
 const CHART_BOTTOM = 38;
-const MEMORY_TOTAL_GB = 32;
-const CPU_MODEL = "AMD Ryzen 7 5800X";
-const MEMORY_MODEL = "DDR4-3200 32 GB";
-const DISK_DEVICES = [
-  {
-    label: "硬盘 1",
-    name: "Samsung 980 PRO 1 TB",
-    totalGb: 1024,
-    usageOffset: 3,
-    readFactor: 0.62,
-    writeFactor: 0.58,
-  },
-  {
-    label: "硬盘 2",
-    name: "WD Blue SN570 500 GB",
-    totalGb: 512,
-    usageOffset: -8,
-    readFactor: 0.38,
-    writeFactor: 0.42,
-  },
-];
-const NETWORK_MODEL = "Intel I225-V 2.5GbE";
 const CPU_LINE_COLORS = [
   "#f5cb6e",
   "#76d6ff",
@@ -63,40 +55,76 @@ const CPU_LINE_COLORS = [
 
 const samples = ref<ServerMetricSample[]>([]);
 const expandedPanels = ref<Set<MetricPanel>>(new Set());
+const loading = ref(true);
+const loadError = ref(false);
 let timerId: number | undefined;
+let fetchInFlight = false;
+let disposed = false;
+
+const emptySample: ServerMetricSample = {
+  timestamp: Date.now(),
+  cpuPercent: 0,
+  cpuCores: [],
+  logicalCores: 0,
+  cpuModel: "CPU",
+  memoryPercent: 0,
+  memoryUsedGb: 0,
+  memoryTotalGb: 0,
+  memoryInMbps: 0,
+  memoryOutMbps: 0,
+  memoryModel: "System Memory",
+  disks: [],
+  diskPercent: 0,
+  diskReadMbps: 0,
+  diskWriteMbps: 0,
+  networkRxMbps: 0,
+  networkTxMbps: 0,
+  networkModel: "Network",
+};
 
 const latestSample = computed<ServerMetricSample>(() => {
   const latest = samples.value[samples.value.length - 1];
-  return latest ?? createInitialSample(Date.now());
+  return latest ?? emptySample;
 });
 
 const memoryUsedGb = computed(() => {
-  return (latestSample.value.memoryPercent / 100) * MEMORY_TOTAL_GB;
+  return latestSample.value.memoryUsedGb ?? 0;
+});
+
+const memoryTotalGb = computed(() => {
+  return latestSample.value.memoryTotalGb ?? 0;
+});
+
+const cpuCoreCount = computed(() => {
+  return Math.max(latestSample.value.logicalCores ?? 0, latestSample.value.cpuCores.length);
 });
 
 const networkPeak = computed(() => {
   const peak = samples.value.reduce((max, sample) => {
     return Math.max(max, sample.networkRxMbps, sample.networkTxMbps);
   }, 1);
-  return Math.max(peak, 24);
+  return Math.max(peak, 1);
 });
 
 const memoryIoPeak = computed(() => {
   const peak = samples.value.reduce((max, sample) => {
     return Math.max(max, sample.memoryInMbps, sample.memoryOutMbps);
   }, 1);
-  return Math.max(peak, 48);
+  return Math.max(peak, 1);
 });
 
 const diskIoPeak = computed(() => {
   const peak = samples.value.reduce((max, sample) => {
-    return Math.max(max, sample.diskReadMbps, sample.diskWriteMbps);
+    const dynamicPeak = (sample.disks ?? []).reduce((diskMax, disk) => {
+      return Math.max(diskMax, disk.readMbps, disk.writeMbps);
+    }, 0);
+    return Math.max(max, dynamicPeak, sample.diskReadMbps, sample.diskWriteMbps);
   }, 1);
-  return Math.max(peak, 96);
+  return Math.max(peak, 1);
 });
 
 const cpuCoreLines = computed(() => {
-  return Array.from({ length: CPU_CORE_COUNT }, (_, index) => {
+  return Array.from({ length: cpuCoreCount.value }, (_, index) => {
     return {
       index,
       color: CPU_LINE_COLORS[index % CPU_LINE_COLORS.length],
@@ -110,27 +138,16 @@ const cpuCoreLines = computed(() => {
 });
 
 const diskRows = computed(() => {
-  return DISK_DEVICES.map((device, index) => {
-    const percent = clamp(latestSample.value.diskPercent + device.usageOffset, 0, 100);
-    const readMbps = latestSample.value.diskReadMbps * device.readFactor;
-    const writeMbps = latestSample.value.diskWriteMbps * device.writeFactor;
+  return (latestSample.value.disks ?? []).map((disk) => {
     return {
-      ...device,
-      panel: `disk-${index}` as MetricPanel,
-      percent,
-      usedGb: (percent / 100) * device.totalGb,
-      readMbps,
-      writeMbps,
-      readPoints: buildScaledLinePoints(
-        samples.value,
-        "diskReadMbps",
-        device.readFactor,
+      ...disk,
+      panel: `disk-${disk.id}` as MetricPanel,
+      readPoints: buildCustomLinePoints(
+        samples.value.map((sample) => findDiskSample(sample, disk.id)?.readMbps ?? 0),
         diskIoPeak.value,
       ),
-      writePoints: buildScaledLinePoints(
-        samples.value,
-        "diskWriteMbps",
-        device.writeFactor,
+      writePoints: buildCustomLinePoints(
+        samples.value.map((sample) => findDiskSample(sample, disk.id)?.writeMbps ?? 0),
         diskIoPeak.value,
       ),
     };
@@ -153,78 +170,8 @@ const networkTxLine = computed(() => {
   return buildLinePoints(samples.value, "networkTxMbps", networkPeak.value);
 });
 
-function createInitialSample(timestamp: number): ServerMetricSample {
-  const cpuCores = Array.from({ length: CPU_CORE_COUNT }, (_, index) => 34 + index * 2);
-
-  return {
-    timestamp,
-    cpuPercent: average(cpuCores),
-    cpuCores,
-    memoryPercent: 58,
-    memoryInMbps: 26,
-    memoryOutMbps: 14,
-    diskPercent: 63,
-    diskReadMbps: 41,
-    diskWriteMbps: 24,
-    networkRxMbps: 13,
-    networkTxMbps: 7,
-  };
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-function drift(value: number, min: number, max: number, delta: number): number {
-  return clamp(value + (Math.random() - 0.5) * delta, min, max);
-}
-
-function average(values: number[]): number {
-  if (values.length === 0) {
-    return 0;
-  }
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function nextSample(previous: ServerMetricSample, timestamp: number): ServerMetricSample {
-  const activityWave = Math.sin(timestamp / 6500) * 4;
-  const cpuCores = Array.from({ length: CPU_CORE_COUNT }, (_, index) => {
-    const previousValue = previous.cpuCores[index] ?? previous.cpuPercent;
-    const corePhase = Math.sin(timestamp / (4200 + index * 460)) * (index % 2 === 0 ? 5 : -4);
-    return drift(previousValue + activityWave * 0.1 + corePhase * 0.08, 8, 98, 16);
-  });
-
-  return {
-    timestamp,
-    cpuPercent: average(cpuCores),
-    cpuCores,
-    memoryPercent: drift(previous.memoryPercent, 44, 82, 4),
-    memoryInMbps: drift(previous.memoryInMbps + activityWave * 0.08, 4, 86, 12),
-    memoryOutMbps: drift(previous.memoryOutMbps - activityWave * 0.05, 2, 72, 10),
-    diskPercent: drift(previous.diskPercent, 59, 68, 0.7),
-    diskReadMbps: drift(previous.diskReadMbps + activityWave * 0.16, 2, 150, 28),
-    diskWriteMbps: drift(previous.diskWriteMbps - activityWave * 0.1, 1, 120, 20),
-    networkRxMbps: drift(previous.networkRxMbps + activityWave * 0.08, 2, 36, 8),
-    networkTxMbps: drift(previous.networkTxMbps - activityWave * 0.05, 1, 24, 5),
-  };
-}
-
-function initializeSamples(): void {
-  const now = Date.now();
-  const seed: ServerMetricSample[] = [];
-  let current = createInitialSample(now - (MAX_SAMPLES - 1) * 1000);
-
-  for (let index = 0; index < MAX_SAMPLES; index += 1) {
-    current = nextSample(current, now - (MAX_SAMPLES - 1 - index) * 1000);
-    seed.push(current);
-  }
-
-  samples.value = seed;
-}
-
-function appendSample(): void {
-  const previous = samples.value[samples.value.length - 1] ?? createInitialSample(Date.now());
-  samples.value = [...samples.value.slice(-(MAX_SAMPLES - 1)), nextSample(previous, Date.now())];
 }
 
 function buildLinePoints(
@@ -234,18 +181,6 @@ function buildLinePoints(
 ): string {
   return buildCustomLinePoints(
     source.map((sample) => sample[valueKey]),
-    maxValue,
-  );
-}
-
-function buildScaledLinePoints(
-  source: ServerMetricSample[],
-  valueKey: MetricValueKey,
-  factor: number,
-  maxValue: number,
-): string {
-  return buildCustomLinePoints(
-    source.map((sample) => sample[valueKey] * factor),
     maxValue,
   );
 }
@@ -269,11 +204,11 @@ function buildCustomLinePoints(values: number[], maxValue: number): string {
 }
 
 function formatPercent(value: number): string {
-  return String(Math.round(value));
+  return String(Math.round(clamp(finiteNumber(value), 0, 100)));
 }
 
 function formatDecimal(value: number, digits = 1): string {
-  return value.toFixed(digits);
+  return finiteNumber(value).toFixed(digits);
 }
 
 function togglePanel(panel: MetricPanel): void {
@@ -286,12 +221,100 @@ function togglePanel(panel: MetricPanel): void {
   expandedPanels.value = nextPanels;
 }
 
+function findDiskSample(sample: ServerMetricSample, diskId: string): DiskMetricSample | undefined {
+  return (sample.disks ?? []).find((disk) => disk.id === diskId);
+}
+
+function finiteNumber(value: number): number {
+  return Number.isFinite(value) ? value : 0;
+}
+
+function bytesToGiB(bytes: number): number {
+  return finiteNumber(bytes) / BYTES_PER_GIB;
+}
+
+function bytesPerSecondToMiB(bytesPerSecond: number): number {
+  return finiteNumber(bytesPerSecond) / BYTES_PER_MIB;
+}
+
+function toSample(metrics: ServerMetrics): ServerMetricSample {
+  const disks = metrics.disks.map((disk, index) => {
+    return {
+      id: disk.id || `disk-${index}`,
+      label: disk.label || `Disk ${index + 1}`,
+      name: disk.name || disk.mountpoint || disk.id || `Disk ${index + 1}`,
+      percent: finiteNumber(disk.percent),
+      usedGb: bytesToGiB(disk.used_bytes),
+      totalGb: bytesToGiB(disk.total_bytes),
+      readMbps: bytesPerSecondToMiB(disk.read_bps),
+      writeMbps: bytesPerSecondToMiB(disk.write_bps),
+    };
+  });
+  const diskCount = Math.max(disks.length, 1);
+  const diskPercent = disks.reduce((sum, disk) => sum + disk.percent, 0) / diskCount;
+  const diskReadMbps = disks.reduce((sum, disk) => sum + disk.readMbps, 0);
+  const diskWriteMbps = disks.reduce((sum, disk) => sum + disk.writeMbps, 0);
+
+  return {
+    timestamp: metrics.timestamp || Date.now(),
+    cpuPercent: finiteNumber(metrics.cpu.percent),
+    cpuCores: metrics.cpu.cores.map(finiteNumber),
+    logicalCores: Math.max(0, Math.trunc(finiteNumber(metrics.cpu.logical_cores))),
+    cpuModel: metrics.cpu.model || "CPU",
+    memoryPercent: finiteNumber(metrics.memory.percent),
+    memoryUsedGb: bytesToGiB(metrics.memory.used_bytes),
+    memoryTotalGb: bytesToGiB(metrics.memory.total_bytes),
+    memoryInMbps: bytesPerSecondToMiB(metrics.memory.swap_in_bps),
+    memoryOutMbps: bytesPerSecondToMiB(metrics.memory.swap_out_bps),
+    memoryModel: metrics.memory.model || "System Memory",
+    disks,
+    diskPercent,
+    diskReadMbps,
+    diskWriteMbps,
+    networkRxMbps: bytesPerSecondToMiB(metrics.network.rx_bps),
+    networkTxMbps: bytesPerSecondToMiB(metrics.network.tx_bps),
+    networkModel: metrics.network.name || "Network",
+  };
+}
+
+function appendServerSample(sample: ServerMetricSample): void {
+  samples.value = [...samples.value.slice(-(MAX_SAMPLES - 1)), sample];
+}
+
+async function fetchSample(): Promise<void> {
+  if (fetchInFlight) {
+    return;
+  }
+
+  fetchInFlight = true;
+  loading.value = samples.value.length === 0;
+  try {
+    const metrics = await getServerMetrics();
+    if (!disposed) {
+      appendServerSample(toSample(metrics));
+      loadError.value = false;
+    }
+  } catch {
+    if (!disposed) {
+      loadError.value = true;
+    }
+  } finally {
+    if (!disposed) {
+      loading.value = false;
+    }
+    fetchInFlight = false;
+  }
+}
+
 onMounted(() => {
-  initializeSamples();
-  timerId = window.setInterval(appendSample, 1000);
+  void fetchSample();
+  timerId = window.setInterval(() => {
+    void fetchSample();
+  }, 1000);
 });
 
 onUnmounted(() => {
+  disposed = true;
   if (timerId !== undefined) {
     window.clearInterval(timerId);
   }
@@ -304,7 +327,17 @@ onUnmounted(() => {
   </header>
 
   <main class="main-content">
-    <section class="metric-list" :aria-label="$t('monitor.summary')">
+    <div v-if="loading && samples.length === 0" class="monitor-state">
+      {{ $t("monitor.loading") }}
+    </div>
+    <div v-else-if="loadError && samples.length === 0" class="monitor-state state-error">
+      {{ $t("monitor.loadError") }}
+    </div>
+    <div v-else-if="loadError" class="monitor-state state-error">
+      {{ $t("monitor.loadError") }}
+    </div>
+
+    <section v-if="samples.length > 0" class="metric-list" :aria-label="$t('monitor.summary')">
       <article class="metric-card" :class="{ 'is-expanded': expandedPanels.has('cpu') }">
         <button
           class="metric-row"
@@ -318,7 +351,7 @@ onUnmounted(() => {
             <strong class="metric-value">%</strong>
           </span>
           <span class="metric-unit-group">
-            <strong class="metric-value">{{ CPU_CORE_COUNT }}</strong>
+            <strong class="metric-value">{{ cpuCoreCount }}</strong>
             <span class="metric-meta">{{ $t("monitor.logicalCores") }}</span>
           </span>
           <span class="metric-io metric-empty"></span>
@@ -329,7 +362,7 @@ onUnmounted(() => {
         <div v-if="expandedPanels.has('cpu')" class="metric-detail">
           <article class="device-section">
             <div class="detail-toolbar">
-              <span class="hardware-name">{{ CPU_MODEL }}</span>
+              <span class="hardware-name">{{ latestSample.cpuModel }}</span>
             </div>
             <div class="cpu-core-grid">
               <article v-for="line in cpuCoreLines" :key="line.index" class="mini-chart-card">
@@ -367,7 +400,7 @@ onUnmounted(() => {
           </span>
           <span class="metric-unit-group">
             <strong class="metric-value"
-              >{{ formatDecimal(memoryUsedGb) }} / {{ MEMORY_TOTAL_GB }}</strong
+              >{{ formatDecimal(memoryUsedGb) }} / {{ formatDecimal(memoryTotalGb, 0) }}</strong
             >
             <span class="metric-meta">GB</span>
           </span>
@@ -385,7 +418,7 @@ onUnmounted(() => {
         <div v-if="expandedPanels.has('memory')" class="metric-detail">
           <article class="wide-chart-panel">
             <div class="detail-toolbar">
-              <span class="hardware-name">{{ MEMORY_MODEL }}</span>
+              <span class="hardware-name">{{ latestSample.memoryModel }}</span>
               <div class="chart-legend">
                 <span><i class="legend-mark memory-in-mark"></i>{{ $t("monitor.in") }}</span>
                 <span><i class="legend-mark out-mark"></i>{{ $t("monitor.out") }}</span>
@@ -408,7 +441,7 @@ onUnmounted(() => {
 
       <article
         v-for="disk in diskRows"
-        :key="disk.label"
+        :key="disk.id"
         class="metric-card"
         :class="{ 'is-expanded': expandedPanels.has(disk.panel) }"
       >
@@ -425,7 +458,7 @@ onUnmounted(() => {
           </span>
           <span class="metric-unit-group">
             <strong class="metric-value"
-              >{{ formatDecimal(disk.usedGb, 0) }} / {{ disk.totalGb }}</strong
+              >{{ formatDecimal(disk.usedGb, 0) }} / {{ formatDecimal(disk.totalGb, 0) }}</strong
             >
             <span class="metric-meta">GB</span>
           </span>
@@ -488,7 +521,7 @@ onUnmounted(() => {
         <div v-if="expandedPanels.has('network')" class="metric-detail">
           <article class="wide-chart-panel">
             <div class="detail-toolbar">
-              <span class="hardware-name">{{ NETWORK_MODEL }}</span>
+              <span class="hardware-name">{{ latestSample.networkModel }}</span>
               <div class="chart-legend">
                 <span><i class="legend-mark network-in-mark"></i>{{ $t("monitor.in") }}</span>
                 <span><i class="legend-mark out-mark"></i>{{ $t("monitor.out") }}</span>
@@ -537,6 +570,21 @@ onUnmounted(() => {
   max-width: 1200px;
   margin: 0 auto;
   padding: 8px 24px 24px;
+}
+
+.monitor-state {
+  margin: 0 0 16px;
+  padding: 16px;
+  color: var(--card-text);
+  font-size: 14px;
+  font-weight: bold;
+  text-align: center;
+  background: var(--card-bg);
+  border: 3px solid var(--card-border);
+}
+
+.state-error {
+  color: var(--danger);
 }
 
 .metric-list {

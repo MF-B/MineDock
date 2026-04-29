@@ -321,6 +321,54 @@
 - `path` 使用 POSIX 语义，禁止 `..` 与反斜杠。
 - 服务端会校验最终文件系统路径位于对应 bind mount 根目录内，并拒绝符号链接逃逸。
 
+### GET /api/monitor/server
+
+- 说明：返回服务器监控页面所需的一次主机级资源指标快照。
+- 状态码：
+  - 成功：`200`
+  - 失败：`500`
+- 请求参数：无。
+- 返回结果：
+
+```json
+{
+  "timestamp": 1777449600000,
+  "cpu": {
+    "percent": 12.5,
+    "cores": [10.1, 14.9],
+    "logical_cores": 2,
+    "model": "Intel(R) Core(TM)"
+  },
+  "memory": {
+    "percent": 48.2,
+    "used_bytes": 8589934592,
+    "total_bytes": 17179869184,
+    "available_bytes": 8589934592,
+    "swap_in_bps": 0,
+    "swap_out_bps": 0,
+    "model": "System Memory 16 GB"
+  },
+  "disks": [
+    {
+      "id": "C:",
+      "label": "Disk 1",
+      "name": "C: (C:)",
+      "mountpoint": "C:",
+      "percent": 55.4,
+      "used_bytes": 536870912000,
+      "total_bytes": 1073741824000,
+      "read_bps": 1024,
+      "write_bps": 2048
+    }
+  ],
+  "network": {
+    "name": "All interfaces",
+    "rx_bps": 4096,
+    "tx_bps": 2048
+  }
+}
+```
+
 ### GET /api/ws/events (WebSocket)
 
 - 说明：建立 WebSocket 连接，实时接收容器状态变更推送

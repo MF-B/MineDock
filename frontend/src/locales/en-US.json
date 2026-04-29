@@ -154,6 +154,8 @@
   "monitor": {
     "title": "Server Monitor",
     "summary": "Server hardware summary",
+    "loading": "Loading server metrics...",
+    "loadError": "Failed to load server metrics.",
     "status": "Status",
     "statusNormal": "Normal",
     "updatedAt": "Updated {time}",

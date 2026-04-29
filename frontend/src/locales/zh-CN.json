@@ -154,6 +154,8 @@
   "monitor": {
     "title": "资源监控",
     "summary": "服务器硬件摘要",
+    "loading": "正在加载服务器指标...",
+    "loadError": "服务器指标加载失败。",
     "status": "状态",
     "statusNormal": "正常",
     "updatedAt": "更新于 {time}",
