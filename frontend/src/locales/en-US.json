@@ -148,7 +148,34 @@
   },
   "sidebar": {
     "containerList": "Containers",
-    "imageRegistry": "Game Templates"
+    "imageRegistry": "Game Templates",
+    "serverMonitor": "Server Monitor"
+  },
+  "monitor": {
+    "title": "Server Monitor",
+    "summary": "Server hardware summary",
+    "status": "Status",
+    "statusNormal": "Normal",
+    "updatedAt": "Updated {time}",
+    "cpu": "CPU",
+    "memory": "Memory",
+    "disk": "Disk",
+    "network": "Network",
+    "inOutUnit": "In / Out MB/s",
+    "inputUnit": "In MB/s",
+    "outputUnit": "Out MB/s",
+    "cpuUsage": "CPU Usage",
+    "cpuCore": "Core {index}",
+    "cpuCoreUsage": "CPU Core Usage",
+    "logicalCores": "logical cores",
+    "in": "In",
+    "out": "Out",
+    "memoryUsage": "Memory Usage",
+    "diskUsage": "Disk Usage",
+    "networkThroughput": "Network Throughput",
+    "lastMinute": "Last 60 seconds",
+    "capacityGb": "{total} GB capacity",
+    "networkLegend": "Receive and transmit traffic"
   },
   "registry": {
     "title": "Game Template Marketplace",
