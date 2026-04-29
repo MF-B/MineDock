@@ -1,6 +1,17 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import {
+  ApiRequestError,
+  createInstanceDir,
+  deleteInstanceFile,
+  downloadInstanceFileUrl,
+  type FileEntry,
+  type FileMount,
+  listInstanceFileMounts,
+  listInstanceFiles,
+  uploadInstanceFile,
+} from "../api";
 
 const props = defineProps<{
   containerId: string;
@@ -8,22 +19,18 @@ const props = defineProps<{
 
 const { t } = useI18n();
 
-// Mock data interfaces
-interface FileItem {
-  name: string;
-  isDir: boolean;
-  size?: number; // Size in bytes
-  modifiedAt?: string; // ISO date string
-}
-
-// Mock state
 const currentPath = ref<string>("/");
-const files = ref<FileItem[]>([
-  { name: "mods", isDir: true, modifiedAt: "2026-04-20T10:00:00Z" },
-  { name: "world", isDir: true, modifiedAt: "2026-04-25T15:30:00Z" },
-  { name: "server.properties", isDir: false, size: 1024, modifiedAt: "2026-04-26T09:12:00Z" },
-  { name: "eula.txt", isDir: false, size: 45, modifiedAt: "2026-04-01T12:00:00Z" },
-]);
+const mounts = ref<FileMount[]>([]);
+const selectedMount = ref("");
+const files = ref<FileEntry[]>([]);
+const loading = ref(false);
+const errorText = ref("");
+const uploadInput = ref<HTMLInputElement | null>(null);
+
+const activeMount = computed(() =>
+  mounts.value.find((mount) => mount.name === selectedMount.value),
+);
+const canWrite = computed(() => Boolean(activeMount.value && !activeMount.value.readonly));
 
 const breadcrumbs = computed(() => {
   const parts = currentPath.value.split("/").filter(Boolean);
@@ -35,6 +42,57 @@ const breadcrumbs = computed(() => {
   }
   return crumbs;
 });
+
+onMounted(() => {
+  void loadMounts();
+});
+
+function mapFileError(err: unknown): string {
+  if (err instanceof ApiRequestError) {
+    const backendMessage = err.backendMessage ?? "";
+    if (backendMessage.includes("mount not found")) return t("files.errors.mountNotFound");
+    if (backendMessage.includes("read-only")) return t("files.errors.readOnly");
+    if (backendMessage.includes("invalid file path")) return t("files.errors.pathInvalid");
+    if (backendMessage.includes("file not found")) return t("files.errors.fileNotFound");
+    if (backendMessage.includes("upload file too large")) return t("files.errors.uploadTooLarge");
+    return t("errors.requestFailedWithStatus", { status: err.status });
+  }
+  return t("errors.unknown");
+}
+
+async function loadMounts(): Promise<void> {
+  loading.value = true;
+  errorText.value = "";
+  try {
+    mounts.value = await listInstanceFileMounts(props.containerId);
+    selectedMount.value = mounts.value[0]?.name ?? "";
+    currentPath.value = "/";
+    if (selectedMount.value) {
+      await loadFiles("/");
+    } else {
+      files.value = [];
+    }
+  } catch (err) {
+    files.value = [];
+    errorText.value = mapFileError(err);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function loadFiles(path: string): Promise<void> {
+  if (!selectedMount.value) return;
+  loading.value = true;
+  errorText.value = "";
+  try {
+    files.value = await listInstanceFiles(props.containerId, selectedMount.value, path);
+    currentPath.value = path;
+  } catch (err) {
+    errorText.value = mapFileError(err);
+  } finally {
+    loading.value = false;
+  }
+}
 
 function formatSize(bytes?: number): string {
   if (bytes === undefined) return "-";
@@ -51,44 +109,77 @@ function formatDate(isoString?: string): string {
   return date.toLocaleString();
 }
 
-function navigateTo(path: string) {
-  // Mock navigation
-  currentPath.value = path;
-  if (path === "/") {
-    files.value = [
-      { name: "mods", isDir: true, modifiedAt: "2026-04-20T10:00:00Z" },
-      { name: "world", isDir: true, modifiedAt: "2026-04-25T15:30:00Z" },
-      { name: "server.properties", isDir: false, size: 1024, modifiedAt: "2026-04-26T09:12:00Z" },
-      { name: "eula.txt", isDir: false, size: 45, modifiedAt: "2026-04-01T12:00:00Z" },
-    ];
-  } else if (path === "/mods") {
-    files.value = [
-      {
-        name: "OptiFine_1.20.1.jar",
-        isDir: false,
-        size: 5432100,
-        modifiedAt: "2026-04-20T10:05:00Z",
-      },
-      { name: "jei-1.20.1.jar", isDir: false, size: 1234500, modifiedAt: "2026-04-20T10:06:00Z" },
-    ];
-  } else {
-    files.value = [];
+function childPath(name: string): string {
+  return currentPath.value === "/" ? `/${name}` : `${currentPath.value}/${name}`;
+}
+
+function navigateTo(path: string): void {
+  void loadFiles(path);
+}
+
+function handleFileClick(file: FileEntry): void {
+  if (file.is_dir) {
+    void loadFiles(childPath(file.name));
   }
 }
 
-function handleFileClick(file: FileItem) {
-  if (file.isDir) {
-    const newPath = currentPath.value.endsWith("/")
-      ? `${currentPath.value}${file.name}`
-      : `${currentPath.value}/${file.name}`;
-    navigateTo(newPath);
+function handleMountChange(): void {
+  currentPath.value = "/";
+  void loadFiles("/");
+}
+
+async function handleCreateDir(): Promise<void> {
+  if (!selectedMount.value || !canWrite.value) return;
+  const name = window.prompt(t("files.prompts.newFolder"));
+  if (!name) return;
+  try {
+    await createInstanceDir(props.containerId, selectedMount.value, childPath(name));
+    await loadFiles(currentPath.value);
+  } catch (err) {
+    errorText.value = mapFileError(err);
   }
 }
 
-function handleAction(action: string, file: FileItem) {
-  // Mock action
-  console.log(`Action ${action} on file ${file.name} in container ${props.containerId}`);
-  alert(`Mock Action: ${action} -> ${file.name}`);
+function triggerUpload(): void {
+  uploadInput.value?.click();
+}
+
+async function handleUpload(event: Event): Promise<void> {
+  if (!selectedMount.value || !canWrite.value) return;
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  try {
+    await uploadInstanceFile(props.containerId, selectedMount.value, currentPath.value, file);
+    await loadFiles(currentPath.value);
+  } catch (err) {
+    errorText.value = mapFileError(err);
+  }
+}
+
+function handleDownload(file: FileEntry): void {
+  if (file.is_dir || !selectedMount.value) return;
+  window.open(
+    downloadInstanceFileUrl(props.containerId, selectedMount.value, childPath(file.name)),
+    "_blank",
+  );
+}
+
+async function handleDelete(file: FileEntry): Promise<void> {
+  if (!selectedMount.value || !canWrite.value) return;
+  if (!window.confirm(t("files.prompts.delete", { name: file.name }))) return;
+  try {
+    await deleteInstanceFile(
+      props.containerId,
+      selectedMount.value,
+      childPath(file.name),
+      file.is_dir,
+    );
+    await loadFiles(currentPath.value);
+  } catch (err) {
+    errorText.value = mapFileError(err);
+  }
 }
 </script>
 
@@ -109,10 +200,26 @@ function handleAction(action: string, file: FileItem) {
         </template>
       </div>
       <div class="actions">
-        <button class="action-btn">{{ $t("files.actions.newFolder") }}</button>
-        <button class="action-btn primary">{{ $t("files.actions.upload") }}</button>
+        <select
+          v-if="mounts.length > 1"
+          v-model="selectedMount"
+          class="mount-select"
+          @change="handleMountChange"
+        >
+          <option v-for="mount in mounts" :key="mount.name" :value="mount.name">
+            {{ mount.name }}
+          </option>
+        </select>
+        <button class="action-btn" :disabled="!canWrite" @click="handleCreateDir">
+          {{ $t("files.actions.newFolder") }}
+        </button>
+        <button class="action-btn primary" :disabled="!canWrite" @click="triggerUpload">
+          {{ $t("files.actions.upload") }}
+        </button>
+        <input ref="uploadInput" class="upload-input" type="file" @change="handleUpload" />
       </div>
     </div>
+    <div v-if="errorText" class="error-state">{{ errorText }}</div>
 
     <!-- File List -->
     <div class="files-list-container">
@@ -126,8 +233,13 @@ function handleAction(action: string, file: FileItem) {
           </tr>
         </thead>
         <tbody>
-          <tr v-if="files.length === 0">
-            <td colspan="4" class="empty-state">{{ $t("files.empty") }}</td>
+          <tr v-if="loading">
+            <td colspan="4" class="empty-state">{{ $t("files.loading") }}</td>
+          </tr>
+          <tr v-else-if="files.length === 0">
+            <td colspan="4" class="empty-state">
+              {{ selectedMount ? $t("files.empty") : $t("files.noMounts") }}
+            </td>
           </tr>
           <tr
             v-for="file in files"
@@ -137,9 +249,9 @@ function handleAction(action: string, file: FileItem) {
           >
             <td class="col-name">
               <div class="file-name-cell">
-                <span class="file-icon" :class="{ 'is-dir': file.isDir }">
+                <span class="file-icon" :class="{ 'is-dir': file.is_dir }">
                   <svg
-                    v-if="file.isDir"
+                    v-if="file.is_dir"
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24"
                     fill="none"
@@ -172,13 +284,14 @@ function handleAction(action: string, file: FileItem) {
               </div>
             </td>
             <td class="col-size">{{ formatSize(file.size) }}</td>
-            <td class="col-date">{{ formatDate(file.modifiedAt) }}</td>
+            <td class="col-date">{{ formatDate(file.modified_at) }}</td>
             <td class="col-actions">
               <div class="row-actions">
                 <button
                   class="icon-btn"
+                  :disabled="file.is_dir"
                   :title="$t('files.actions.download')"
-                  @click.stop="handleAction('download', file)"
+                  @click.stop="handleDownload(file)"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -197,8 +310,9 @@ function handleAction(action: string, file: FileItem) {
                 </button>
                 <button
                   class="icon-btn danger"
+                  :disabled="!canWrite"
                   :title="$t('files.actions.delete')"
-                  @click.stop="handleAction('delete', file)"
+                  @click.stop="handleDelete(file)"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -280,6 +394,17 @@ function handleAction(action: string, file: FileItem) {
   gap: 12px;
 }
 
+.mount-select {
+  min-width: 140px;
+  border: 2px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--card-text);
+  padding: 6px 8px;
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: bold;
+}
+
 .action-btn {
   border: 2px solid var(--card-border);
   background: var(--card-bg);
@@ -299,6 +424,14 @@ function handleAction(action: string, file: FileItem) {
   background: var(--create-brass-dark);
 }
 
+.action-btn:disabled,
+.icon-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+  filter: none;
+}
+
 .action-btn.primary {
   background: var(--success);
   color: #fff;
@@ -307,6 +440,19 @@ function handleAction(action: string, file: FileItem) {
 .action-btn.primary:hover {
   background: var(--success);
   filter: brightness(1.1);
+}
+
+.upload-input {
+  display: none;
+}
+
+.error-state {
+  padding: 10px 16px;
+  color: var(--danger);
+  border-bottom: 2px solid var(--card-border-inner);
+  background: var(--danger-light);
+  font-size: 13px;
+  font-weight: bold;
 }
 
 .files-list-container {

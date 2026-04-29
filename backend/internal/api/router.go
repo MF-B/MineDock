@@ -6,7 +6,14 @@ import (
 )
 
 // NewRouter 注册 API 路由并包装中间件。
-func NewRouter(h *Handler, games *GameHandler, ws *WsHandler, console *ConsoleHandler, config *ConfigHandler) http.Handler {
+func NewRouter(
+	h *Handler,
+	games *GameHandler,
+	ws *WsHandler,
+	console *ConsoleHandler,
+	config *ConfigHandler,
+	files *FilesHandler,
+) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/instances", h.GetInstances)
@@ -17,6 +24,14 @@ func NewRouter(h *Handler, games *GameHandler, ws *WsHandler, console *ConsoleHa
 	if config != nil {
 		mux.HandleFunc("GET /api/instances/{id}/config", config.HandleGetConfig)
 		mux.HandleFunc("PUT /api/instances/{id}/config", config.HandleUpdateConfig)
+	}
+	if files != nil {
+		mux.HandleFunc("GET /api/instances/{id}/files/mounts", files.HandleMounts)
+		mux.HandleFunc("GET /api/instances/{id}/files", files.HandleList)
+		mux.HandleFunc("POST /api/instances/{id}/files/dir", files.HandleCreateDir)
+		mux.HandleFunc("POST /api/instances/{id}/files/upload", files.HandleUpload)
+		mux.HandleFunc("GET /api/instances/{id}/files/download", files.HandleDownload)
+		mux.HandleFunc("DELETE /api/instances/{id}/files", files.HandleDelete)
 	}
 	if ws != nil {
 		mux.HandleFunc("GET /api/ws/events", ws.HandleEvents)

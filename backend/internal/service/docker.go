@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
@@ -20,6 +22,7 @@ const (
 	managedLabelValue = "true"
 	nameLabelKey      = "minedock.name"
 	gameIDLabelKey    = "minedock.game_id"
+	defaultDataDir    = "data/instances"
 )
 
 // dockerClient 定义 DockerService 依赖的 Docker API。
@@ -68,11 +71,21 @@ type DockerService struct {
 	cli      dockerClient
 	store    InstanceStore
 	registry GameRegistry
+	dataDir  string
 }
 
 // NewDockerService 使用依赖项创建 DockerService。
 func NewDockerService(cli dockerClient, s InstanceStore, registry GameRegistry) *DockerService {
-	return &DockerService{cli: cli, store: s, registry: registry}
+	return NewDockerServiceWithDataDir(cli, s, registry, defaultDataDir)
+}
+
+// NewDockerServiceWithDataDir 使用指定数据目录创建 DockerService。
+func NewDockerServiceWithDataDir(cli dockerClient, s InstanceStore, registry GameRegistry, dataDir string) *DockerService {
+	dataDir = strings.TrimSpace(dataDir)
+	if dataDir == "" {
+		dataDir = defaultDataDir
+	}
+	return &DockerService{cli: cli, store: s, registry: registry, dataDir: dataDir}
 }
 
 // CreateInstance 创建托管容器并持久化实例元数据。
@@ -122,9 +135,14 @@ func (s *DockerService) CreateInstance(
 	if len(tpl.Container.Command) > 0 {
 		cmd = append(cmd, tpl.Container.Command...)
 	}
+	binds, err := buildBindMounts(s.dataDir, name, tpl.Container.Volumes)
+	if err != nil {
+		return "", err
+	}
+
 	hostConfig := &container.HostConfig{
 		PortBindings: portBindings,
-		Binds:        buildVolumeBinds(name, tpl.Container.Volumes),
+		Binds:        binds,
 	}
 	effectiveResources := tpl.Container.Resources
 	if resources != nil {
@@ -275,10 +293,11 @@ func (s *DockerService) UpdateInstanceConfig(
 		instanceName = containerID
 	}
 
-	hostConfig := &container.HostConfig{}
-	if inspect.HostConfig != nil {
-		hostConfig.Binds = append([]string(nil), inspect.HostConfig.Binds...)
+	binds, err := buildBindMounts(s.dataDir, instanceName, tpl.Container.Volumes)
+	if err != nil {
+		return "", err
 	}
+	hostConfig := &container.HostConfig{Binds: binds}
 	hostConfig.PortBindings = portBindings
 	resolvedResources := readResourceLimits(inspect.HostConfig)
 	if newResources != nil {
@@ -406,7 +425,7 @@ func (s *DockerService) ListInstances(ctx context.Context) ([]model.Instance, er
 }
 
 // DeleteInstance 删除已停止的托管容器及其持久化记录。
-func (s *DockerService) DeleteInstance(ctx context.Context, containerID string) error {
+func (s *DockerService) DeleteInstance(ctx context.Context, containerID string, purgeData bool) error {
 	inspect, err := s.cli.ContainerInspect(ctx, containerID)
 	if err != nil {
 		return fmt.Errorf("inspect container: %w", err)
@@ -416,13 +435,64 @@ func (s *DockerService) DeleteInstance(ctx context.Context, containerID string) 
 		return model.ErrInstanceRunning
 	}
 
+	instanceName := instanceNameFromInspect(inspect, containerID)
+
 	if err := s.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: false}); err != nil {
 		return fmt.Errorf("remove container: %w", err)
+	}
+	var purgeErr error
+	if purgeData {
+		purgeErr = s.removeInstanceData(instanceName)
 	}
 	if err := s.store.Delete(ctx, containerID); err != nil {
 		return fmt.Errorf("delete instance record: %w", err)
 	}
+	if purgeErr != nil {
+		return purgeErr
+	}
 	return nil
+}
+
+func instanceNameFromInspect(inspect container.InspectResponse, fallback string) string {
+	if inspect.Config != nil {
+		if name := strings.TrimSpace(inspect.Config.Labels[nameLabelKey]); name != "" {
+			return name
+		}
+	}
+	if name := strings.Trim(strings.TrimSpace(inspect.Name), "/"); name != "" {
+		return name
+	}
+	return fallback
+}
+
+func (s *DockerService) removeInstanceData(instanceName string) error {
+	target, err := safeInstanceDataDir(s.dataDir, instanceName)
+	if err != nil {
+		return err
+	}
+	if err := os.RemoveAll(target); err != nil {
+		return fmt.Errorf("remove instance data: %w", err)
+	}
+	return nil
+}
+
+func safeInstanceDataDir(baseDir, instanceName string) (string, error) {
+	baseAbs, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve data dir: %w", err)
+	}
+	targetAbs, err := filepath.Abs(filepath.Join(baseAbs, sanitizeVolumeNameToken(instanceName)))
+	if err != nil {
+		return "", fmt.Errorf("resolve instance data dir: %w", err)
+	}
+	rel, err := filepath.Rel(baseAbs, targetAbs)
+	if err != nil {
+		return "", fmt.Errorf("validate instance data dir: %w", err)
+	}
+	if rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." {
+		return "", fmt.Errorf("invalid instance data dir")
+	}
+	return targetAbs, nil
 }
 
 // readInstance 从存储层读取实例信息并与运行态进行对账。

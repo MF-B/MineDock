@@ -41,6 +41,14 @@ func main() {
 		templatesDir = "templates"
 	}
 
+	dataDir := os.Getenv("MINEDOCK_DATA_DIR")
+	if dataDir == "" {
+		dataDir = "data/instances"
+	}
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		log.Fatalf("init data dir: %v", err)
+	}
+
 	gameSvc, err := service.NewGameService(gamesPath, templatesDir)
 	if err != nil {
 		log.Fatalf("init game service: %v", err)
@@ -49,7 +57,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	svc := service.NewDockerService(cli, sqliteStore, gameSvc)
+	svc := service.NewDockerServiceWithDataDir(cli, sqliteStore, gameSvc, dataDir)
 	hub := service.NewEventHub(cli, svc.ListInstances)
 	go hub.Run(ctx)
 
@@ -59,7 +67,9 @@ func main() {
 	consoleSvc := service.NewConsoleService(cli)
 	consoleHandler := api.NewConsoleHandler(consoleSvc)
 	configHandler := api.NewConfigHandler(svc)
-	router := api.NewRouter(h, gameHandler, wsHandler, consoleHandler, configHandler)
+	fileSvc := service.NewFileService(sqliteStore, gameSvc, dataDir)
+	filesHandler := api.NewFilesHandler(fileSvc)
+	router := api.NewRouter(h, gameHandler, wsHandler, consoleHandler, configHandler, filesHandler)
 
 	addr := ":8080"
 	log.Printf("MineDock backend listening on %s", addr)

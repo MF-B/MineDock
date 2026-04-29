@@ -154,6 +154,19 @@ export interface VolumeMount {
   readonly: boolean;
 }
 
+export interface FileMount {
+  name: string;
+  container_path: string;
+  readonly: boolean;
+}
+
+export interface FileEntry {
+  name: string;
+  is_dir: boolean;
+  size: number;
+  modified_at: string;
+}
+
 export interface ResourceLimits {
   memory: string;
   cpu: number;
@@ -238,8 +251,71 @@ export function stopInstance(containerId: string): Promise<unknown> {
   });
 }
 
-export function deleteInstance(containerId: string): Promise<unknown> {
-  return request(`/instances/${containerId}`, {
+export function deleteInstance(containerId: string, purgeData = false): Promise<unknown> {
+  const query = purgeData ? "?purge_data=true" : "";
+  return request(`/instances/${containerId}${query}`, {
+    method: "DELETE",
+  });
+}
+
+export function listInstanceFileMounts(containerId: string): Promise<FileMount[]> {
+  return request<FileMount[]>(`/instances/${encodeURIComponent(containerId)}/files/mounts`, {
+    method: "GET",
+  });
+}
+
+export function listInstanceFiles(
+  containerId: string,
+  mount: string,
+  path: string,
+): Promise<FileEntry[]> {
+  const query = new URLSearchParams({ mount, path });
+  return request<FileEntry[]>(
+    `/instances/${encodeURIComponent(containerId)}/files?${query.toString()}`,
+    { method: "GET" },
+  );
+}
+
+export function createInstanceDir(
+  containerId: string,
+  mount: string,
+  path: string,
+): Promise<unknown> {
+  return request(`/instances/${encodeURIComponent(containerId)}/files/dir`, {
+    method: "POST",
+    body: { mount, path },
+  });
+}
+
+export function uploadInstanceFile(
+  containerId: string,
+  mount: string,
+  path: string,
+  file: File,
+): Promise<unknown> {
+  const form = new FormData();
+  form.set("mount", mount);
+  form.set("path", path);
+  form.set("file", file);
+  return request(`/instances/${encodeURIComponent(containerId)}/files/upload`, {
+    method: "POST",
+    body: form,
+  });
+}
+
+export function downloadInstanceFileUrl(containerId: string, mount: string, path: string): string {
+  const query = new URLSearchParams({ mount, path });
+  return `${BASE_URL}/instances/${encodeURIComponent(containerId)}/files/download?${query.toString()}`;
+}
+
+export function deleteInstanceFile(
+  containerId: string,
+  mount: string,
+  path: string,
+  recursive: boolean,
+): Promise<unknown> {
+  const query = new URLSearchParams({ mount, path, recursive: String(recursive) });
+  return request(`/instances/${encodeURIComponent(containerId)}/files?${query.toString()}`, {
     method: "DELETE",
   });
 }

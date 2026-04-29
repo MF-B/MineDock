@@ -5,7 +5,11 @@
     "emptyState": "暂无容器，请点击右上角新建容器。",
     "delete": "删除",
     "toggleTitle": "开启/关闭",
-    "confirmDelete": "确认彻底删除该容器吗？"
+    "confirmDeleteTitle": "删除容器",
+    "confirmDelete": "确认彻底删除该容器吗？",
+    "confirmPurgeData": "同时删除宿主机数据",
+    "cancelDelete": "取消",
+    "confirmDeleteAction": "删除"
   },
   "console": {
     "back": "返回列表",
@@ -43,7 +47,9 @@
   },
   "files": {
     "root": "根目录",
+    "loading": "正在加载文件...",
     "empty": "此文件夹为空。",
+    "noMounts": "当前没有可用的文件挂载卷。",
     "columns": {
       "name": "名称",
       "size": "大小",
@@ -55,6 +61,17 @@
       "upload": "上传文件",
       "download": "下载",
       "delete": "删除"
+    },
+    "prompts": {
+      "newFolder": "文件夹名称",
+      "delete": "确认删除 {name} 吗？"
+    },
+    "errors": {
+      "mountNotFound": "文件挂载卷不可用。",
+      "readOnly": "该挂载卷是只读的。",
+      "pathInvalid": "文件路径不合法。",
+      "fileNotFound": "文件不存在或已被删除。",
+      "uploadTooLarge": "上传文件过大。"
     }
   },
   "createModal": {

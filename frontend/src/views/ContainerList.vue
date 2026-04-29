@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useContainerStore } from "../stores/containers";
@@ -9,6 +9,8 @@ const { t } = useI18n();
 const router = useRouter();
 const store = useContainerStore();
 const instanceSync = useInstanceSync();
+const pendingDeleteId = ref<string | null>(null);
+const purgeDeleteData = ref(false);
 
 const outputText = computed(() => {
   if (store.outputI18n) {
@@ -49,10 +51,23 @@ function openInstanceDetail(containerId: string): void {
 }
 
 // 删除属于破坏性操作，执行前必须二次确认。
-async function handleDelete(containerId: string): Promise<void> {
-  if (!confirm(t("containers.confirmDelete"))) return;
+function handleDelete(containerId: string): void {
+  pendingDeleteId.value = containerId;
+  purgeDeleteData.value = false;
+}
+
+function cancelDelete(): void {
+  pendingDeleteId.value = null;
+  purgeDeleteData.value = false;
+}
+
+async function confirmDelete(): Promise<void> {
+  const containerId = pendingDeleteId.value;
+  if (!containerId) return;
+  const purgeData = purgeDeleteData.value;
+  cancelDelete();
   store.print(t("status.deleting"));
-  await store.remove(containerId);
+  await store.remove(containerId, purgeData);
 }
 
 // 根据当前运行态切换 start/stop，并输出阶段性反馈以避免静默操作。
@@ -120,6 +135,25 @@ async function handleToggle(instance: {
           </button>
         </div>
       </div>
+    </div>
+
+    <div v-if="pendingDeleteId" class="modal-overlay" @click.self="cancelDelete">
+      <section class="delete-dialog" role="dialog" aria-modal="true">
+        <h2 class="dialog-title">{{ $t("containers.confirmDeleteTitle") }}</h2>
+        <p class="dialog-message">{{ $t("containers.confirmDelete") }}</p>
+        <label class="purge-option">
+          <input v-model="purgeDeleteData" type="checkbox" />
+          <span>{{ $t("containers.confirmPurgeData") }}</span>
+        </label>
+        <div class="dialog-actions">
+          <button class="secondary-btn" @click="cancelDelete">
+            {{ $t("containers.cancelDelete") }}
+          </button>
+          <button class="delete-btn" @click="confirmDelete">
+            {{ $t("containers.confirmDeleteAction") }}
+          </button>
+        </div>
+      </section>
     </div>
 
     <!-- 用于显示接口返回的简易日志 -->
@@ -279,6 +313,65 @@ async function handleToggle(instance: {
   box-shadow: 1px 1px 0 0 rgba(255, 77, 79, 0.5);
   background-color: var(--danger);
   color: var(--text-on-dark);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.delete-dialog {
+  width: min(420px, 100%);
+  padding: 20px;
+  background: var(--card-bg);
+  border: 3px solid var(--card-border);
+  box-shadow:
+    inset 0 3px 0 0 var(--card-bg),
+    inset 0 -3px 0 0 var(--card-bg),
+    inset 0 6px 0 0 var(--card-border-inner),
+    inset 0 -6px 0 0 var(--card-border-inner);
+}
+
+.dialog-title {
+  margin: 0 0 12px;
+  color: var(--card-text);
+  font-size: 16px;
+}
+
+.dialog-message {
+  margin: 0 0 16px;
+  color: var(--text-muted);
+}
+
+.purge-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  color: var(--card-text);
+  font-weight: bold;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.secondary-btn {
+  padding: 6px 16px;
+  background-color: var(--card-bg);
+  color: var(--card-text);
+  border: 2px solid var(--card-border);
+  border-radius: 0;
+  font-weight: bold;
+  cursor: pointer;
 }
 
 /* ======= 拉杆样式的开关 ======= */

@@ -3,7 +3,10 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -104,53 +107,74 @@ func TestBuildPortBindings(t *testing.T) {
 	})
 }
 
-func TestBuildVolumeBinds(t *testing.T) {
+func TestBuildBindMounts(t *testing.T) {
 	t.Run("empty volumes", func(t *testing.T) {
-		binds := buildVolumeBinds("my-server", nil)
+		binds, err := buildBindMounts(t.TempDir(), "my-server", nil)
+		if err != nil {
+			t.Fatalf("buildBindMounts: %v", err)
+		}
 		if binds != nil {
 			t.Fatalf("expected nil binds, got %v", binds)
 		}
 	})
 
 	t.Run("normal volume", func(t *testing.T) {
-		binds := buildVolumeBinds("my-server", []model.VolumeMount{{
+		baseDir := t.TempDir()
+		binds, err := buildBindMounts(baseDir, "my-server", []model.VolumeMount{{
 			Name:          "server-data",
 			ContainerPath: "/data",
 		}})
+		if err != nil {
+			t.Fatalf("buildBindMounts: %v", err)
+		}
 
 		if len(binds) != 1 {
 			t.Fatalf("expected 1 bind, got %d", len(binds))
 		}
-		if binds[0] != "minedock-my-server-server-data:/data" {
+		hostPath := filepath.Join(baseDir, "my-server", "volumes", "server-data")
+		if binds[0] != fmt.Sprintf("%s:/data", hostPath) {
 			t.Fatalf("unexpected bind: %s", binds[0])
+		}
+		if _, err := os.Stat(hostPath); err != nil {
+			t.Fatalf("expected host path to exist: %v", err)
 		}
 	})
 
 	t.Run("readonly volume", func(t *testing.T) {
-		binds := buildVolumeBinds("my-server", []model.VolumeMount{{
+		baseDir := t.TempDir()
+		binds, err := buildBindMounts(baseDir, "my-server", []model.VolumeMount{{
 			Name:          "server-data",
 			ContainerPath: "/data",
 			ReadOnly:      true,
 		}})
+		if err != nil {
+			t.Fatalf("buildBindMounts: %v", err)
+		}
 
 		if len(binds) != 1 {
 			t.Fatalf("expected 1 bind, got %d", len(binds))
 		}
-		if binds[0] != "minedock-my-server-server-data:/data:ro" {
+		hostPath := filepath.Join(baseDir, "my-server", "volumes", "server-data")
+		if binds[0] != fmt.Sprintf("%s:/data:ro", hostPath) {
 			t.Fatalf("unexpected bind: %s", binds[0])
 		}
 	})
 
 	t.Run("instance name with special chars", func(t *testing.T) {
-		binds := buildVolumeBinds("My Server (US)#1", []model.VolumeMount{{
+		baseDir := t.TempDir()
+		binds, err := buildBindMounts(baseDir, "My Server (US)#1", []model.VolumeMount{{
 			Name:          "World Data@Prod",
 			ContainerPath: "/data",
 		}})
+		if err != nil {
+			t.Fatalf("buildBindMounts: %v", err)
+		}
 
 		if len(binds) != 1 {
 			t.Fatalf("expected 1 bind, got %d", len(binds))
 		}
-		if binds[0] != "minedock-my-server-us-1-world-data-prod:/data" {
+		hostPath := filepath.Join(baseDir, "my-server-us-1", "volumes", "world-data-prod")
+		if binds[0] != fmt.Sprintf("%s:/data", hostPath) {
 			t.Fatalf("unexpected bind: %s", binds[0])
 		}
 	})
@@ -578,6 +602,40 @@ func TestCreateInstance_UsesTemplateResources(t *testing.T) {
 	}
 }
 
+func TestCreateInstance_UsesBindMountDataDir(t *testing.T) {
+	dataDir := t.TempDir()
+	cli := &fakeDockerClient{}
+	store := newFakeInstanceStore()
+	registry := &fakeRegistry{
+		game: model.Game{ID: "minecraft-java", Name: "Minecraft Java"},
+		template: model.GameTemplate{
+			Image: model.TemplateImage{Name: "itzg/minecraft-server", Tag: "latest"},
+			Container: model.ContainerConfig{
+				Volumes: []model.VolumeMount{{
+					Name:          "World Data",
+					ContainerPath: "/data",
+					ReadOnly:      true,
+				}},
+			},
+		},
+	}
+
+	svc := NewDockerServiceWithDataDir(cli, store, registry, dataDir)
+
+	_, err := svc.CreateInstance(context.Background(), "Server One", "minecraft-java", map[string]string{}, nil, nil)
+	if err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+	hostPath := filepath.Join(dataDir, "server-one", "volumes", "world-data")
+	expectedBind := fmt.Sprintf("%s:/data:ro", hostPath)
+	if len(cli.createHost.Binds) != 1 || cli.createHost.Binds[0] != expectedBind {
+		t.Fatalf("unexpected binds: %+v", cli.createHost.Binds)
+	}
+	if _, err := os.Stat(hostPath); err != nil {
+		t.Fatalf("expected bind mount host path to exist: %v", err)
+	}
+}
+
 func TestCreateInstance_OverrideResources(t *testing.T) {
 	cli := &fakeDockerClient{}
 	store := newFakeInstanceStore()
@@ -738,5 +796,61 @@ func TestListInstances_IncludesGameID(t *testing.T) {
 	}
 	if saved := store.instances["c1"]; saved.GameID != "minecraft-java" {
 		t.Fatalf("expected saved game id minecraft-java, got %s", saved.GameID)
+	}
+}
+
+func TestDeleteInstance_PurgeDataRemovesInstanceDirAndStore(t *testing.T) {
+	dataDir := t.TempDir()
+	instanceDir := filepath.Join(dataDir, "server-1")
+	volumeDir := filepath.Join(instanceDir, "volumes", "world")
+	if err := os.MkdirAll(volumeDir, 0o755); err != nil {
+		t.Fatalf("mkdir volume dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(volumeDir, "level.dat"), []byte("data"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	cli := &fakeDockerClient{
+		inspectResp: container.InspectResponse{
+			ContainerJSONBase: &container.ContainerJSONBase{
+				State: &container.State{Running: false},
+			},
+			Config: &container.Config{Labels: map[string]string{nameLabelKey: "server-1"}},
+		},
+	}
+	store := newFakeInstanceStore(model.Instance{ContainerID: "c1", Name: "server-1", GameID: "minecraft-java"})
+	svc := NewDockerServiceWithDataDir(cli, store, &fakeRegistry{}, dataDir)
+
+	if err := svc.DeleteInstance(context.Background(), "c1", true); err != nil {
+		t.Fatalf("DeleteInstance: %v", err)
+	}
+	if !slices.Contains(cli.removedIDs, "c1") {
+		t.Fatalf("expected container removed, got %+v", cli.removedIDs)
+	}
+	if _, ok := store.instances["c1"]; ok {
+		t.Fatal("expected instance record to be deleted")
+	}
+	if _, err := os.Stat(instanceDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected instance dir removed, got %v", err)
+	}
+}
+
+func TestDeleteInstance_PurgeErrorStillDeletesStore(t *testing.T) {
+	cli := &fakeDockerClient{
+		inspectResp: container.InspectResponse{
+			ContainerJSONBase: &container.ContainerJSONBase{
+				State: &container.State{Running: false},
+			},
+			Config: &container.Config{Labels: map[string]string{nameLabelKey: "server-1"}},
+		},
+	}
+	store := newFakeInstanceStore(model.Instance{ContainerID: "c1", Name: "server-1", GameID: "minecraft-java"})
+	svc := NewDockerServiceWithDataDir(cli, store, &fakeRegistry{}, string(rune(0)))
+
+	err := svc.DeleteInstance(context.Background(), "c1", true)
+	if err == nil {
+		t.Fatal("expected purge error")
+	}
+	if _, ok := store.instances["c1"]; ok {
+		t.Fatal("expected instance record to be deleted after container removal")
 	}
 }

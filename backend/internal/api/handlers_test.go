@@ -24,7 +24,7 @@ type mockService struct {
 	) (string, error)
 	startFn  func(ctx context.Context, id string) error
 	stopFn   func(ctx context.Context, id string) error
-	deleteFn func(ctx context.Context, id string) error
+	deleteFn func(ctx context.Context, id string, purgeData bool) error
 }
 
 func (m *mockService) ListInstances(ctx context.Context) ([]model.Instance, error) {
@@ -45,8 +45,8 @@ func (m *mockService) StartInstance(ctx context.Context, id string) error {
 func (m *mockService) StopInstance(ctx context.Context, id string) error {
 	return m.stopFn(ctx, id)
 }
-func (m *mockService) DeleteInstance(ctx context.Context, id string) error {
-	return m.deleteFn(ctx, id)
+func (m *mockService) DeleteInstance(ctx context.Context, id string, purgeData bool) error {
+	return m.deleteFn(ctx, id, purgeData)
 }
 
 type mockRegistryLister struct {
@@ -78,7 +78,7 @@ func newTestRouter(m *mockService) http.Handler {
 			return model.GameTemplate{}, model.ErrGameNotFound
 		},
 	})
-	return NewRouter(h, gh, nil, nil, nil)
+	return NewRouter(h, gh, nil, nil, nil, nil)
 }
 
 // --- GET /api/instances 场景 ---
@@ -135,7 +135,7 @@ func TestGetGames_Success(t *testing.T) {
 			return model.GameTemplate{}, model.ErrGameNotFound
 		},
 	})
-	router := NewRouter(h, gh, nil, nil, nil)
+	router := NewRouter(h, gh, nil, nil, nil, nil)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/games", nil)
@@ -167,7 +167,7 @@ func TestGetGameTemplate_Success(t *testing.T) {
 			return model.GameTemplate{Image: model.TemplateImage{Name: "itzg/minecraft-server", Tag: "latest"}}, nil
 		},
 	})
-	router := NewRouter(h, gh, nil, nil, nil)
+	router := NewRouter(h, gh, nil, nil, nil, nil)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/games/minecraft-java/template", nil)
@@ -196,7 +196,7 @@ func TestGetGameTemplate_NotFound(t *testing.T) {
 			return model.GameTemplate{}, model.ErrGameNotFound
 		},
 	})
-	router := NewRouter(h, gh, nil, nil, nil)
+	router := NewRouter(h, gh, nil, nil, nil, nil)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/games/not-exists/template", nil)
@@ -448,9 +448,12 @@ func TestStopInstance_Success(t *testing.T) {
 
 func TestDeleteInstance_Success(t *testing.T) {
 	router := newTestRouter(&mockService{
-		deleteFn: func(_ context.Context, id string) error {
+		deleteFn: func(_ context.Context, id string, purgeData bool) error {
 			if id != "abc123" {
 				t.Fatalf("unexpected id: %s", id)
+			}
+			if purgeData {
+				t.Fatal("expected purgeData=false")
 			}
 			return nil
 		},
@@ -465,9 +468,31 @@ func TestDeleteInstance_Success(t *testing.T) {
 	}
 }
 
+func TestDeleteInstance_PurgeData(t *testing.T) {
+	router := newTestRouter(&mockService{
+		deleteFn: func(_ context.Context, id string, purgeData bool) error {
+			if id != "abc123" {
+				t.Fatalf("unexpected id: %s", id)
+			}
+			if !purgeData {
+				t.Fatal("expected purgeData=true")
+			}
+			return nil
+		},
+	})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodDelete, "/api/instances/abc123?purge_data=true", nil)
+	router.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestDeleteInstance_Running(t *testing.T) {
 	router := newTestRouter(&mockService{
-		deleteFn: func(_ context.Context, _ string) error {
+		deleteFn: func(_ context.Context, _ string, _ bool) error {
 			return model.ErrInstanceRunning
 		},
 	})

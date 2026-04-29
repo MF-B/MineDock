@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"minedock/backend/internal/model"
@@ -22,7 +23,7 @@ type InstanceService interface {
 	) (string, error)
 	StartInstance(ctx context.Context, containerID string) error
 	StopInstance(ctx context.Context, containerID string) error
-	DeleteInstance(ctx context.Context, containerID string) error
+	DeleteInstance(ctx context.Context, containerID string, purgeData bool) error
 }
 
 // Handler 暴露 HTTP 处理器。
@@ -139,7 +140,17 @@ func (h *Handler) DeleteInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.DeleteInstance(r.Context(), id); err != nil {
+	purgeData := false
+	if raw := strings.TrimSpace(r.URL.Query().Get("purge_data")); raw != "" {
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, statusResponse{Status: "error", Error: "invalid purge_data"})
+			return
+		}
+		purgeData = parsed
+	}
+
+	if err := h.svc.DeleteInstance(r.Context(), id, purgeData); err != nil {
 		writeJSON(w, mapErrorCode(err), statusResponse{Status: "error", Error: err.Error()})
 		return
 	}
@@ -165,11 +176,21 @@ func mapErrorCode(err error) int {
 		return http.StatusBadRequest
 	case errors.Is(err, model.ErrInvalidResourceLimits):
 		return http.StatusBadRequest
+	case errors.Is(err, model.ErrPathInvalid):
+		return http.StatusBadRequest
+	case errors.Is(err, model.ErrUploadTooLarge):
+		return http.StatusBadRequest
+	case errors.Is(err, model.ErrMountNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, model.ErrFileNotFound):
+		return http.StatusNotFound
 	case errors.Is(err, model.ErrNameExists):
 		return http.StatusConflict
 	case errors.Is(err, model.ErrInstanceRunning):
 		return http.StatusConflict
 	case errors.Is(err, model.ErrContainerNotStopped):
+		return http.StatusConflict
+	case errors.Is(err, model.ErrReadOnlyMount):
 		return http.StatusConflict
 	case errors.Is(err, model.ErrTemplateNotFound):
 		return http.StatusInternalServerError
