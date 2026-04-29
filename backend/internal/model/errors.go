@@ -25,3 +25,18 @@ var ErrInvalidResourceLimits = errors.New("invalid resource limits")
 
 // ErrContainerNotStopped 表示容器必须先停止，才能执行配置更新。
 var ErrContainerNotStopped = errors.New("container must be stopped to update config")
+
+// ErrMountNotFound 表示请求的文件挂载点不存在。
+var ErrMountNotFound = errors.New("mount not found")
+
+// ErrPathInvalid 表示请求的文件路径不合法。
+var ErrPathInvalid = errors.New("invalid file path")
+
+// ErrReadOnlyMount 表示正在对只读挂载点执行写操作。
+var ErrReadOnlyMount = errors.New("mount is read-only")
+
+// ErrFileNotFound 表示请求的文件或目录不存在。
+var ErrFileNotFound = errors.New("file not found")
+
+// ErrUploadTooLarge 表示上传文件超过服务端大小限制。
+var ErrUploadTooLarge = errors.New("upload file too large")

@@ -5,7 +5,11 @@
     "emptyState": "No containers yet. Click the button above to create one.",
     "delete": "Delete",
     "toggleTitle": "Start/Stop",
-    "confirmDelete": "Are you sure you want to permanently delete this container?"
+    "confirmDeleteTitle": "Delete container",
+    "confirmDelete": "Are you sure you want to permanently delete this container?",
+    "confirmPurgeData": "Also delete stored data on the host",
+    "cancelDelete": "Cancel",
+    "confirmDeleteAction": "Delete"
   },
   "console": {
     "back": "Back to List",
@@ -43,7 +47,9 @@
   },
   "files": {
     "root": "Root",
+    "loading": "Loading files...",
     "empty": "This folder is empty.",
+    "noMounts": "No file mount is available.",
     "columns": {
       "name": "Name",
       "size": "Size",
@@ -55,6 +61,17 @@
       "upload": "Upload File",
       "download": "Download",
       "delete": "Delete"
+    },
+    "prompts": {
+      "newFolder": "Folder name",
+      "delete": "Delete {name}?"
+    },
+    "errors": {
+      "mountNotFound": "The file mount is unavailable.",
+      "readOnly": "This mount is read-only.",
+      "pathInvalid": "The file path is invalid.",
+      "fileNotFound": "The file no longer exists.",
+      "uploadTooLarge": "The uploaded file is too large."
     }
   },
   "createModal": {

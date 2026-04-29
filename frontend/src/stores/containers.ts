@@ -199,9 +199,9 @@ export const useContainerStore = defineStore("containers", () => {
   }
 
   // 删除结果与刷新都在 store 内完成，破坏性确认由视图层负责。
-  async function remove(containerId: string): Promise<void> {
+  async function remove(containerId: string, purgeData = false): Promise<void> {
     try {
-      const data = await apiDelete(containerId);
+      const data = await apiDelete(containerId, purgeData);
       print(data);
       await fetchInstances();
     } catch (err) {

@@ -43,7 +43,7 @@ stateDiagram-v2
 ## 创建配置注入
 
 - 端口映射来源：模板 `container.ports`，创建容器时写入 Docker `ExposedPorts` 与 `PortBindings`。
-- 卷挂载来源：模板 `container.volumes`，卷名规则为 `minedock-{instanceName}-{volumeName}`。
+- 卷挂载来源：模板 `container.volumes`，采用 bind mount 映射到 `MINEDOCK_DATA_DIR/{instanceName}/volumes/{volumeName}`。
 - 启动命令来源：若模板配置了 `container.command` 则覆盖镜像命令；否则使用镜像默认 `ENTRYPOINT/CMD`。
 
 ## 在线配置修改
@@ -52,7 +52,7 @@ stateDiagram-v2
 - 变更方式：通过重建容器应用新配置，流程为 `Inspect -> Remove(old) -> Create(new env + port bindings)`。
 - 状态约束：仅允许在 Stopped 状态下执行配置更新，运行中返回冲突错误。
 - 生效方式：更新完成后容器保持 Stopped，需用户手动启动使配置生效。
-- 保留策略：复用原有卷挂载与端口映射，避免卷数据丢失。
+- 保留策略：按实例名称复用 bind mount 宿主机目录，并应用最新模板卷配置。
 - 标识变化：重建后 `container_id` 会变化，前端需跳转到新的详情路由。
 
 ## 一致性策略
@@ -75,4 +75,4 @@ stateDiagram-v2
 - 创建流程：若数据库保存失败，立即强制删除刚创建容器。
 - 启停流程：Docker 操作成功但 DB 更新失败时，接口返回错误；后续列表刷新会将状态重新收敛。
 - 删除流程：Docker 删除成功后若 DB 删除失败，后续列表会因 Docker 不存在而清理状态。
-- 数据卷策略：删除实例不会自动清理 Docker 卷，卷数据默认保留，需手动回收或后续能力支持。
+- 数据卷策略：删除实例默认保留宿主机数据目录；传入 `purge_data=true` 时同步删除实例数据目录。

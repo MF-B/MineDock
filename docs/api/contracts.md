@@ -99,7 +99,7 @@
   - 失败：`400`（JSON非法/空名称/缺失 game_id/game_id 不合法/params 非法/resources 非法）、`409`（名称冲突）、`500`（模板不存在或模板非法/容器创建失败）
 - 行为说明：
   - 端口映射来源：模板 `container.ports`，可在请求体 `ports` 中覆盖 host 端口
-  - 卷挂载来源：模板 `container.volumes`，卷名规则为 `minedock-{instanceName}-{volumeName}`
+  - 卷挂载来源：模板 `container.volumes`，宿主机目录为 `MINEDOCK_DATA_DIR/{instanceName}/volumes/{volumeName}`
   - 资源限制来源：默认使用模板 `container.resources`，可在请求体 `resources` 中覆盖
   - 若宿主机端口冲突，返回 Docker 原生错误并映射为 `500`
 - 请求参数：
@@ -158,7 +158,9 @@
 - 状态码：
   - 成功：`200`
   - 失败：`400`（ID非法）、`409`（实例运行中）、`500`
-- 请求参数：无（ID 在路径中）
+- 请求参数：
+  - 路径参数：`id`（容器 ID）
+  - 可选 query：`purge_data=true|false`，为 `true` 时删除实例的宿主机数据目录（默认 `false`）
 - 返回结果：
 
 ```json
@@ -211,6 +213,113 @@
 ```json
 { "status": "success", "container_id": "new_container_id" }
 ```
+
+### GET /api/instances/:id/files/mounts
+
+- 说明：获取实例可管理的文件挂载卷列表
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（ID 非法）、`404`（实例无可用挂载卷）、`500`
+- 返回结果：
+
+```json
+[
+  {
+    "name": "server-data",
+    "container_path": "/data",
+    "readonly": false
+  }
+]
+```
+
+### GET /api/instances/:id/files
+
+- 说明：列出指定挂载卷路径下的文件
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（ID 非法/path 非法）、`404`（mount 或文件不存在）、`500`
+- 请求参数：
+  - query：`mount`（模板卷名）
+  - query：`path`（POSIX 路径，根目录为 `/`）
+- 返回结果：
+
+```json
+[
+  {
+    "name": "server.properties",
+    "is_dir": false,
+    "size": 1024,
+    "modified_at": "2026-04-28T12:00:00Z"
+  }
+]
+```
+
+### POST /api/instances/:id/files/dir
+
+- 说明：在指定挂载卷中新建目录
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（ID 非法/path 非法/JSON 非法）、`404`（mount 不存在）、`409`（只读挂载卷）、`500`
+- 请求参数：
+
+```json
+{ "mount": "server-data", "path": "/mods" }
+```
+
+- 返回结果：
+
+```json
+{ "status": "success" }
+```
+
+### POST /api/instances/:id/files/upload
+
+- 说明：上传单个文件到指定挂载卷目录，默认单文件限制为 128MB
+- 状态码：
+  - 成功：`200`
+- 失败：`400`（ID 非法/path 非法/上传体非法/文件过大）、`404`（mount 不存在）、`409`（只读挂载卷）、`500`
+- 请求参数：`multipart/form-data`
+  - field：`mount`
+  - field：`path`（目标目录）
+  - file：`file`
+- 返回结果：
+
+```json
+{ "status": "success" }
+```
+
+### GET /api/instances/:id/files/download
+
+- 说明：下载指定挂载卷中的文件
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（ID 非法/path 非法/目标是目录）、`404`（mount 或文件不存在）、`500`
+- 请求参数：
+  - query：`mount`
+  - query：`path`
+- 返回结果：文件流
+
+### DELETE /api/instances/:id/files
+
+- 说明：删除指定挂载卷中的文件或目录
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（ID 非法/path 非法/recursive 非法）、`404`（mount 或文件不存在）、`409`（只读挂载卷）、`500`
+- 请求参数：
+  - query：`mount`
+  - query：`path`
+  - query：`recursive=true|false`
+- 返回结果：
+
+```json
+{ "status": "success" }
+```
+
+文件管理路径约束：
+
+- `mount` 必须来自实例模板 `container.volumes`。
+- `path` 使用 POSIX 语义，禁止 `..` 与反斜杠。
+- 服务端会校验最终文件系统路径位于对应 bind mount 根目录内，并拒绝符号链接逃逸。
 
 ### GET /api/ws/events (WebSocket)
 

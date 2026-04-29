@@ -2,29 +2,55 @@ package service
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"minedock/backend/internal/model"
 )
 
-func buildVolumeBinds(instanceName string, volumes []model.VolumeMount) []string {
+func buildBindMounts(baseDir, instanceName string, volumes []model.VolumeMount) ([]string, error) {
 	if len(volumes) == 0 {
-		return nil
+		return nil, nil
 	}
 
-	instanceToken := sanitizeVolumeNameToken(instanceName)
 	binds := make([]string, 0, len(volumes))
 	for _, v := range volumes {
-		volumeToken := sanitizeVolumeNameToken(v.Name)
-		dockerVolName := fmt.Sprintf("minedock-%s-%s", instanceToken, volumeToken)
-		bind := fmt.Sprintf("%s:%s", dockerVolName, strings.TrimSpace(v.ContainerPath))
+		hostPath, err := safeVolumeDataDir(baseDir, instanceName, v.Name)
+		if err != nil {
+			return nil, err
+		}
+		if err := os.MkdirAll(hostPath, 0o755); err != nil {
+			return nil, fmt.Errorf("create volume data dir: %w", err)
+		}
+		bind := fmt.Sprintf("%s:%s", hostPath, strings.TrimSpace(v.ContainerPath))
 		if v.ReadOnly {
 			bind += ":ro"
 		}
 		binds = append(binds, bind)
 	}
 
-	return binds
+	return binds, nil
+}
+
+func safeVolumeDataDir(baseDir, instanceName, volumeName string) (string, error) {
+	instanceDir, err := safeInstanceDataDir(baseDir, instanceName)
+	if err != nil {
+		return "", err
+	}
+	targetAbs, err := filepath.Abs(filepath.Join(instanceDir, "volumes", sanitizeVolumeNameToken(volumeName)))
+	if err != nil {
+		return "", fmt.Errorf("resolve volume data dir: %w", err)
+	}
+	rel, err := filepath.Rel(instanceDir, targetAbs)
+	if err != nil {
+		return "", fmt.Errorf("validate volume data dir: %w", err)
+	}
+	if rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." {
+		return "", fmt.Errorf("invalid volume data dir")
+	}
+
+	return targetAbs, nil
 }
 
 func sanitizeVolumeNameToken(raw string) string {

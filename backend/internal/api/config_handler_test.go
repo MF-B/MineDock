@@ -51,14 +51,12 @@ func newConfigTestRouter(cfg *mockConfigurator) http.Handler {
 		createFn: func(_ context.Context, _, _ string, _ map[string]string, _ []model.PortMapping, _ *model.ResourceLimits) (string, error) {
 			return "", nil
 		},
-		startFn: func(_ context.Context, _ string) error { return nil },
-		stopFn:  func(_ context.Context, _ string) error { return nil },
-		deleteFn: func(_ context.Context, _ string) error {
-			return nil
-		},
+		startFn:  func(_ context.Context, _ string) error { return nil },
+		stopFn:   func(_ context.Context, _ string) error { return nil },
+		deleteFn: func(_ context.Context, _ string, _ bool) error { return nil },
 	})
 
-	return NewRouter(h, nil, nil, nil, NewConfigHandler(cfg))
+	return NewRouter(h, nil, nil, nil, NewConfigHandler(cfg), nil)
 }
 
 func TestGetConfig_Success(t *testing.T) {
