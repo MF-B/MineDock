@@ -65,9 +65,9 @@ stateDiagram-v2
 ## 控制台交互
 
 - 路由：前端通过 `/instances/:id` 进入容器详情页，页面建立 `GET /api/ws/console/:id` WebSocket。
-- 输入链路：浏览器 WebSocket 输入 -> 后端 ConsoleHandler -> Docker Attach stdin。
-- 输出链路：Docker Attach stdout/stderr -> 后端 ConsoleHandler -> 浏览器 WebSocket -> xterm.js。
-- 运行态约束：仅 Running 容器允许 Attach；容器停止后连接会断开，页面提示用户重新启动后再连接。
+- 输入链路：运行中容器的浏览器 WebSocket 输入 -> 后端 ConsoleHandler -> Docker Attach stdin。
+- 输出链路：Docker Attach stdout/stderr 或 Docker Logs 读取历史输出 -> ConsoleHandler -> 前端。
+- 停止态行为：容器停止或崩溃后，页面保留终端内容；重新进入详情页时仍可读取 Docker 已保留的历史日志。
 - TTY 差异：TTY 容器输出直接透传；非 TTY 容器需先做 stdout/stderr 解复用再推送。
 
 ## 失败与回滚策略

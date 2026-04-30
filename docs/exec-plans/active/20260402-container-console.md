@@ -42,12 +42,12 @@
 > [!WARNING]
 > **仅运行中的容器可以 Attach**
 >
-> Docker `ContainerAttach` 要求容器处于 Running 状态。如果容器已停止，后端返回错误，前端展示"容器未运行"提示。用户需先启动容器再查看控制台。
+> Docker `ContainerAttach` 要求容器处于 Running 状态。容器已停止时，控制台 WebSocket 改用 Docker Logs 读取历史输出并发送给前端，便于在崩溃后直接查看原因。
 
 > [!IMPORTANT]
 > **WebSocket 路径设计**
 >
-> 新增 WebSocket 端点 `GET /api/ws/console/{id}`，其中 `{id}` 为容器 ID。每个 WebSocket 连接对应一个 Docker Attach 会话。连接关闭时自动释放 Docker Attach 资源。
+> 新增 WebSocket 端点 `GET /api/ws/console/{id}`，其中 `{id}` 为容器 ID。Running 容器对应一个 Docker Attach 会话，Stopped/Exited 容器对应一次 Docker Logs 读取。连接关闭时自动释放资源。
 >
 > 该端点与现有的 `GET /api/ws/events`（事件广播）相互独立。
 
@@ -105,17 +105,17 @@ type ConsoleService struct {
 // NewConsoleService 创建 ConsoleService。
 func NewConsoleService(cli *client.Client) *ConsoleService { ... }
 
-// Attach 连接到运行中容器的主进程 stdin/stdout/stderr。
-// 返回的 HijackedResponse 包含双向流，调用方负责关闭。
-// 容器未运行时返回错误。
-func (s *ConsoleService) Attach(ctx context.Context, containerID string) (types.HijackedResponse, error) {
-    // 1. ContainerInspect 检查容器是否 Running
-    // 2. ContainerAttach(ctx, containerID, container.AttachOptions{
+// Open 打开容器控制台会话。
+// Running 容器返回 Attach 双向流，Stopped/Exited 容器返回 Docker Logs 历史输出。
+func (s *ConsoleService) Open(ctx context.Context, containerID string) (*ConsoleSession, error) {
+    // 1. ContainerInspect 检查容器状态和 TTY
+    // 2. Running 时调用 ContainerAttach(ctx, containerID, container.AttachOptions{
     //        Stream: true,
     //        Stdin:  true,
     //        Stdout: true,
     //        Stderr: true,
     //    })
+    // 3. 非 Running 时调用 ContainerLogs(ctx, containerID, LogsOptions{ShowStdout: true, ShowStderr: true})
 }
 ```
 
@@ -311,7 +311,7 @@ export function useConsole(containerId: Ref<string>): {
 - 调用 `useConsole(containerId)` 管理终端
 - 展示容器名称和状态（从 `useContainerStore` 获取）
 - 返回按钮跳回容器列表页
-- 容器未运行时展示提示信息，不初始化终端
+- 容器未运行时仍初始化终端并显示 Docker 历史日志
 
 ---
 
@@ -350,14 +350,14 @@ export function useConsole(containerId: Ref<string>): {
 ```markdown
 ### GET /api/ws/console/:id (WebSocket)
 
-- 说明：建立 WebSocket 连接，双向桥接容器主进程的 stdin/stdout
+- 说明：建立 WebSocket 连接，展示容器控制台输出；运行中容器同时桥接主进程 stdin
 - 协议：WebSocket（HTTP Upgrade）
-- 前置条件：容器必须处于 Running 状态
 - 数据流向：
   - 服务端 → 客户端：容器 stdout/stderr 输出（二进制帧）
-  - 客户端 → 服务端：用户输入指令（文本帧，自动写入容器 stdin）
-- 连接关闭时机：客户端断开 / 容器停止 / 服务端关闭
-- 错误情况：容器不存在或未运行时，WebSocket 升级后立即关闭并附带错误原因
+  - 客户端 → 服务端：运行中容器接收用户输入指令（文本帧，自动写入容器 stdin）
+- 状态行为：Running 容器使用 Attach 实时流；Stopped/Exited 容器发送 Docker 历史日志后正常关闭
+- 连接关闭时机：客户端断开 / 容器停止 / 历史日志发送完成 / 服务端关闭
+- 错误情况：容器不存在或日志读取失败时，WebSocket 升级后立即关闭并附带错误原因
 ```
 
 #### [MODIFY] instance_lifecycle.md (`docs/design-docs/instance_lifecycle.md`)
@@ -380,7 +380,7 @@ export function useConsole(containerId: Ref<string>): {
   - [ ] 安装 `@xterm/xterm`、`@xterm/addon-fit`、`@xterm/addon-attach`
 - [ ] 后端 Service 层
   - [ ] 新建 `backend/internal/service/console_service.go`，实现 `ConsoleService`
-    - [ ] Attach 方法：检查容器运行状态 → 调用 Docker `ContainerAttach`
+    - [ ] Open 方法：Running 调用 Docker `ContainerAttach`，Stopped/Exited 调用 Docker `ContainerLogs`
 - [ ] 后端 API 层
   - [ ] 新建 `backend/internal/api/console_handler.go`，实现 `ConsoleHandler`
     - [ ] WebSocket 升级 → Docker Attach → 双向 pipe
@@ -411,7 +411,7 @@ export function useConsole(containerId: Ref<string>): {
 
 ## 已确认的决策
 
-- ✅ **历史日志回看**：本期不实现。用户进入详情页后只能看到实时输出流（attach 之后的内容）。历史日志回看（进入页面时先拉取最近 N 行）留作后续增强。
+- ✅ **历史日志回看**：已实现。用户进入详情页后，Running 容器先显示 Docker 已保留日志再继续实时流；Stopped/Exited 容器显示 Docker 历史日志，便于排查崩溃原因。
 
 > [!NOTE]
 > **TTY 模式自适应（设计说明）**
@@ -439,6 +439,6 @@ export function useConsole(containerId: Ref<string>): {
 - 验证 xterm.js 终端渲染，WebSocket 连接指示器显示绿色
 - 验证容器启动日志实时滚动输出到终端
 - 在终端输入 Minecraft 服务器命令（如 `list`），验证命令被发送且返回结果显示在终端
-- 停止容器，验证 WebSocket 自动断开，终端显示断线提示
-- 对已停止的容器进入详情页，验证展示"容器未运行"提示而非空白终端
+- 停止容器，验证 WebSocket 自动断开后终端仍保留已有日志
+- 对已停止的容器进入详情页，验证终端显示 Docker 历史日志而非空白终端
 - 浏览器调整窗口大小，验证 xterm.js 终端自适应 resize

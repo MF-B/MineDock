@@ -15,7 +15,7 @@
     "back": "返回列表",
     "loading": "正在加载容器状态...",
     "instanceNotFound": "容器不存在或已被删除。",
-    "instanceNotRunning": "容器未运行，请先启动后再连接控制台。",
+    "instanceNotRunning": "容器未运行，当前显示历史日志。",
     "connected": "控制台已连接",
     "disconnectedLabel": "控制台未连接",
     "connectionError": "控制台连接失败，请刷新页面重试。",

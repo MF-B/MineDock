@@ -28,8 +28,8 @@ const containerName = computed(() => {
   return currentInstance.value?.name || containerId.value;
 });
 
-const canAttach = computed(() => {
-  return currentInstance.value ? store.isRunning(currentInstance.value.status) : false;
+const canOpenConsole = computed(() => {
+  return Boolean(containerId.value && currentInstance.value);
 });
 
 const infoKey = computed<string | null>(() => {
@@ -41,9 +41,6 @@ const infoKey = computed<string | null>(() => {
   }
   if (!currentInstance.value) {
     return "console.instanceNotFound";
-  }
-  if (!canAttach.value) {
-    return "console.instanceNotRunning";
   }
   return null;
 });
@@ -110,9 +107,9 @@ watch(
 );
 
 watch(
-  [loading, canAttach, activeTab],
-  ([isLoading, running, tab]) => {
-    if (isLoading || tab !== "console" || !running) {
+  [loading, canOpenConsole, activeTab],
+  ([isLoading, hasConsoleTarget, tab]) => {
+    if (isLoading || tab !== "console" || !hasConsoleTarget) {
       dispose();
       return;
     }
