@@ -13,6 +13,7 @@ func NewRouter(
 	console *ConsoleHandler,
 	config *ConfigHandler,
 	files *FilesHandler,
+	monitor *MonitorHandler,
 ) http.Handler {
 	mux := http.NewServeMux()
 
@@ -32,6 +33,9 @@ func NewRouter(
 		mux.HandleFunc("POST /api/instances/{id}/files/upload", files.HandleUpload)
 		mux.HandleFunc("GET /api/instances/{id}/files/download", files.HandleDownload)
 		mux.HandleFunc("DELETE /api/instances/{id}/files", files.HandleDelete)
+	}
+	if monitor != nil {
+		mux.HandleFunc("GET /api/monitor/server", monitor.HandleGetServerMetrics)
 	}
 	if ws != nil {
 		mux.HandleFunc("GET /api/ws/events", ws.HandleEvents)

@@ -172,6 +172,49 @@ export interface ResourceLimits {
   cpu: number;
 }
 
+export interface ServerCPUMetrics {
+  percent: number;
+  cores: number[];
+  logical_cores: number;
+  model: string;
+}
+
+export interface ServerMemoryMetrics {
+  percent: number;
+  used_bytes: number;
+  total_bytes: number;
+  available_bytes: number;
+  swap_in_bps: number;
+  swap_out_bps: number;
+  model: string;
+}
+
+export interface ServerDiskMetrics {
+  id: string;
+  label: string;
+  name: string;
+  mountpoint: string;
+  percent: number;
+  used_bytes: number;
+  total_bytes: number;
+  read_bps: number;
+  write_bps: number;
+}
+
+export interface ServerNetworkMetrics {
+  name: string;
+  rx_bps: number;
+  tx_bps: number;
+}
+
+export interface ServerMetrics {
+  timestamp: number;
+  cpu: ServerCPUMetrics;
+  memory: ServerMemoryMetrics;
+  disks: ServerDiskMetrics[];
+  network: ServerNetworkMetrics;
+}
+
 export interface HealthCheckConfig {
   test: string[];
   interval: string;
@@ -336,4 +379,8 @@ export function updateInstanceConfig(
     method: "PUT",
     body: { params, ports, resources },
   });
+}
+
+export function getServerMetrics(): Promise<ServerMetrics> {
+  return request<ServerMetrics>("/monitor/server", { method: "GET" });
 }

@@ -57,7 +57,7 @@ func newFilesTestRouter(files *mockFileManager) http.Handler {
 		stopFn:   func(_ context.Context, _ string) error { return nil },
 		deleteFn: func(_ context.Context, _ string, _ bool) error { return nil },
 	})
-	return NewRouter(h, nil, nil, nil, nil, NewFilesHandler(files))
+	return NewRouter(h, nil, nil, nil, nil, NewFilesHandler(files), nil)
 }
 
 func TestFilesMounts_Success(t *testing.T) {

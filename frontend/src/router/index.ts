@@ -15,6 +15,11 @@ const router = createRouter({
       component: () => import("../views/ImageRegistry.vue"),
     },
     {
+      path: "/monitor",
+      name: "ServerMonitor",
+      component: () => import("../views/ServerMonitor.vue"),
+    },
+    {
       path: "/registry/:gameId/create",
       name: "CreateInstance",
       component: () => import("../views/CreateInstance.vue"),
