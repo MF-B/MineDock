@@ -176,6 +176,8 @@ func mapErrorCode(err error) int {
 		return http.StatusBadRequest
 	case errors.Is(err, model.ErrInvalidResourceLimits):
 		return http.StatusBadRequest
+	case errors.Is(err, model.ErrPortUnavailable):
+		return http.StatusConflict
 	case errors.Is(err, model.ErrPathInvalid):
 		return http.StatusBadRequest
 	case errors.Is(err, model.ErrUploadTooLarge):

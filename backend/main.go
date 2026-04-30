@@ -70,7 +70,17 @@ func main() {
 	fileSvc := service.NewFileService(sqliteStore, gameSvc, dataDir)
 	filesHandler := api.NewFilesHandler(fileSvc)
 	monitorHandler := api.NewMonitorHandler(service.NewMonitorService())
-	router := api.NewRouter(h, gameHandler, wsHandler, consoleHandler, configHandler, filesHandler, monitorHandler)
+	minecraftVersionHandler := api.NewMinecraftVersionHandler(service.NewMinecraftVersionService())
+	router := api.NewRouter(
+		h,
+		gameHandler,
+		wsHandler,
+		consoleHandler,
+		configHandler,
+		filesHandler,
+		monitorHandler,
+		minecraftVersionHandler,
+	)
 
 	addr := ":8080"
 	log.Printf("MineDock backend listening on %s", addr)

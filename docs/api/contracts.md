@@ -19,7 +19,15 @@
 - 返回结果：
 
 ```json
-[{ "container_id": "xxx", "name": "xxx", "status": "xxx" }]
+[
+  {
+    "container_id": "xxx",
+    "name": "xxx",
+    "game_id": "minecraft-java",
+    "status": "xxx",
+    "config_path": "data/instances/server/minedock.instance.json"
+  }
+]
 ```
 
 ### GET /api/games
@@ -91,17 +99,53 @@
 }
 ```
 
+### GET /api/games/minecraft-java/versions
+
+- 说明：获取 Minecraft Java 可选游戏版本列表，数据来源为 Mojang version manifest
+- 状态码：
+  - 成功：`200`
+  - 失败：`500`
+- 请求参数：无
+- 返回结果：
+
+```json
+[
+  { "id": "1.21.4", "type": "release" },
+  { "id": "26.1", "type": "release" }
+]
+```
+
+### GET /api/games/minecraft-java/loader-versions
+
+- 说明：按 Minecraft 版本和服务端类型获取加载器版本列表
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（缺少参数）、`500`
+- 请求参数：
+  - query：`mc_version`
+  - query：`server_type`，支持 `FABRIC` / `FORGE` / `NEOFORGE`
+- 行为说明：
+  - Fabric：读取 Fabric Meta API
+  - Forge：读取 Forge Maven metadata，并按 `<mc_version>-` 前缀筛选
+  - NeoForge：读取 NeoForge Maven metadata，并按 `1.26.1 -> 26.1.*` 规则筛选
+- 返回结果：
+
+```json
+[{ "version": "14.22.1.2478" }, { "version": "0.16.10", "stable": true }]
+```
+
 ### POST /api/instances
 
 - 说明：创建一个新容器（初始为 Stopped），并应用模板中的端口映射与卷挂载配置
 - 状态码：
   - 成功：`200`
-  - 失败：`400`（JSON非法/空名称/缺失 game_id/game_id 不合法/params 非法/resources 非法）、`409`（名称冲突）、`500`（模板不存在或模板非法/容器创建失败）
+- 失败：`400`（JSON非法/空名称/缺失 game_id/game_id 不合法/params 非法/resources 非法）、`409`（名称冲突/宿主机端口占用）、`500`（模板不存在或模板非法/容器创建失败）
 - 行为说明：
   - 端口映射来源：模板 `container.ports`，可在请求体 `ports` 中覆盖 host 端口
   - 卷挂载来源：模板 `container.volumes`，宿主机目录为 `MINEDOCK_DATA_DIR/{instanceName}/volumes/{volumeName}`
   - 资源限制来源：默认使用模板 `container.resources`，可在请求体 `resources` 中覆盖
-  - 若宿主机端口冲突，返回 Docker 原生错误并映射为 `500`
+  - 创建前会预检宿主机端口占用；若端口已被其他进程占用，返回 `409`
+  - 预检与 Docker 创建之间仍存在竞态，Docker 原生端口错误仍会按实际错误返回
 - 请求参数：
 
 ```json
@@ -180,11 +224,21 @@
 {
   "game_id": "minecraft-java",
   "status": "Stopped",
+  "image": "itzg/minecraft-server:java8",
   "ports": [{ "host": 25565, "container": 25565, "protocol": "tcp" }],
   "resources": { "memory": "2g", "cpu": 2 },
   "params": {
     "SERVER_TYPE": "PAPER",
     "MAX_PLAYERS": "20"
+  },
+  "game_config": {
+    "kind": "minecraft_java",
+    "mode": "managed",
+    "minecraft_version": "1.12.1",
+    "server_type": "FORGE",
+    "server_version": "14.22.1.2478",
+    "java_tag": "java8",
+    "java_tag_source": "auto"
   }
 }
 ```
@@ -194,7 +248,7 @@
 - 说明：更新容器配置（参数 + 端口映射 + 资源限制，通过重建容器实现，容器必须处于 Stopped）
 - 状态码：
   - 成功：`200`
-  - 失败：`400`（ID非法/参数非法）、`409`（容器未停止）、`500`
+- 失败：`400`（ID非法/参数非法）、`409`（容器未停止/宿主机端口占用）、`500`
 - 请求参数：
 
 ```json

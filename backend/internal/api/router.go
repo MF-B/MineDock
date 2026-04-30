@@ -14,6 +14,7 @@ func NewRouter(
 	config *ConfigHandler,
 	files *FilesHandler,
 	monitor *MonitorHandler,
+	minecraftVersions *MinecraftVersionHandler,
 ) http.Handler {
 	mux := http.NewServeMux()
 
@@ -46,6 +47,10 @@ func NewRouter(
 	if games != nil {
 		mux.HandleFunc("GET /api/games", games.GetGames)
 		mux.HandleFunc("GET /api/games/{id}/template", games.GetGameTemplate)
+	}
+	if minecraftVersions != nil {
+		mux.HandleFunc("GET /api/games/minecraft-java/versions", minecraftVersions.HandleMinecraftVersions)
+		mux.HandleFunc("GET /api/games/minecraft-java/loader-versions", minecraftVersions.HandleMinecraftLoaderVersions)
 	}
 
 	return withCORS(mux)

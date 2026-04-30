@@ -31,6 +31,15 @@ const values = ref<Record<string, string>>({});
 const resourceEnabled = ref(false);
 const resourceMemoryValue = ref(0);
 const resourceCPUValue = ref(0);
+const minecraftJavaTag = ref("");
+
+const minecraftJavaTags = [
+  { value: "java8", label: "Java 8" },
+  { value: "java16", label: "Java 16" },
+  { value: "java17", label: "Java 17" },
+  { value: "java21", label: "Java 21" },
+  { value: "java25", label: "Java 25" },
+];
 
 const isRunning = computed(() => {
   const status = config.value?.status ?? "";
@@ -39,9 +48,14 @@ const isRunning = computed(() => {
 });
 
 const editable = computed(() => !loading.value && !saving.value && !isRunning.value);
+const isMinecraftJavaConfig = computed(() => {
+  return config.value?.game_config?.kind === "minecraft_java";
+});
 const hasEditableFields = computed(() => {
   const paramCount = template.value?.params.length ?? 0;
-  return ports.value.length > 0 || paramCount > 0 || resourceEnabled.value;
+  return (
+    ports.value.length > 0 || paramCount > 0 || resourceEnabled.value || isMinecraftJavaConfig.value
+  );
 });
 
 watch(
@@ -60,6 +74,9 @@ function mapRequestErrorToKey(error: unknown): string {
     }
     if (backendMessage.includes("invalid container id")) {
       return "errors.invalidContainerId";
+    }
+    if (backendMessage.includes("host port") && backendMessage.includes("unavailable")) {
+      return "errors.portUnavailable";
     }
 
     if (error.key === "errors.network") {
@@ -186,6 +203,14 @@ function initializeResources(
   setResourceInputs(memoryMB, cpu);
 }
 
+function initializeMinecraftConfig(currentConfig: InstanceConfigPayload): void {
+  if (currentConfig.game_config?.kind !== "minecraft_java") {
+    minecraftJavaTag.value = "";
+    return;
+  }
+  minecraftJavaTag.value = currentConfig.game_config.java_tag || "java21";
+}
+
 function isBooleanParamEnabled(key: string): boolean {
   return values.value[key] === "true";
 }
@@ -208,6 +233,21 @@ function buildParamsPayload(): Record<string, string> {
   for (const param of currentTemplate.params) {
     const value = values.value[param.key];
     payload[param.key] = typeof value === "string" ? value : "";
+  }
+
+  if (config.value?.game_config?.kind === "minecraft_java") {
+    const gameConfig = config.value.game_config;
+    payload.MC_VERSION = gameConfig.minecraft_version || payload.MC_VERSION || "LATEST";
+    if (gameConfig.server_type && gameConfig.server_type !== "VANILLA") {
+      payload.SERVER_TYPE = gameConfig.server_type;
+    }
+    if (gameConfig.server_version) {
+      payload.SERVER_VERSION = gameConfig.server_version;
+    }
+    if (minecraftJavaTag.value) {
+      payload.JAVA_TAG = minecraftJavaTag.value;
+      payload.JAVA_TAG_SOURCE = "manual";
+    }
   }
   return payload;
 }
@@ -266,6 +306,7 @@ async function loadConfig(): Promise<void> {
   resourceEnabled.value = false;
   resourceMemoryValue.value = 0;
   resourceCPUValue.value = 0;
+  minecraftJavaTag.value = "";
 
   const id = props.containerId.trim();
   if (!id) {
@@ -296,6 +337,7 @@ async function loadConfig(): Promise<void> {
     template.value = currentTemplate;
     initializeValues(currentTemplate, currentConfig);
     initializeResources(currentTemplate, currentConfig);
+    initializeMinecraftConfig(currentConfig);
   } catch {
     loadErrorKey.value = "config.noTemplate";
   }
@@ -418,11 +460,29 @@ async function handleSave(): Promise<void> {
         <div v-else class="state-message">{{ $t("config.resourcesUnavailable") }}</div>
       </div>
 
-      <div v-if="template.params.length === 0" class="state-message">
+      <div v-if="isMinecraftJavaConfig" class="port-list">
+        <h3 class="section-title">{{ $t("config.minecraftTitle") }}</h3>
+        <article class="port-item">
+          <label class="field-label" for="cfg-java-tag">{{ $t("config.javaVersionLabel") }}</label>
+          <select
+            id="cfg-java-tag"
+            v-model="minecraftJavaTag"
+            class="text-input"
+            :disabled="!editable"
+          >
+            <option v-for="tag in minecraftJavaTags" :key="tag.value" :value="tag.value">
+              {{ tag.label }}
+            </option>
+          </select>
+          <p class="field-hint">{{ $t("config.javaVersionHint") }}</p>
+        </article>
+      </div>
+
+      <div v-if="!isMinecraftJavaConfig && template.params.length === 0" class="state-message">
         {{ $t("registry.noParams") }}
       </div>
 
-      <div v-else class="param-list">
+      <div v-else-if="!isMinecraftJavaConfig" class="param-list">
         <article v-for="param in template.params" :key="param.key" class="param-item">
           <label class="field-label" :for="`cfg-${param.key}`">{{ param.label }}</label>
           <p v-if="param.description" class="field-hint">{{ param.description }}</p>

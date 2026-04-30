@@ -328,6 +328,13 @@ func (f *fakeRegistry) GetTemplate(_ context.Context, _ string) (model.GameTempl
 	return f.template, nil
 }
 
+func newTestDockerService(t *testing.T, cli dockerClient, store InstanceStore, registry GameRegistry) *DockerService {
+	t.Helper()
+	svc := NewDockerServiceWithDataDir(cli, store, registry, t.TempDir())
+	svc.checkPorts = func([]model.PortMapping) error { return nil }
+	return svc
+}
+
 func TestGetInstanceConfig_Success(t *testing.T) {
 	port, err := nat.NewPort("tcp", "25565")
 	if err != nil {
@@ -372,7 +379,7 @@ func TestGetInstanceConfig_Success(t *testing.T) {
 		},
 	}
 
-	svc := NewDockerService(cli, newFakeInstanceStore(), registry)
+	svc := newTestDockerService(t, cli, newFakeInstanceStore(), registry)
 
 	cfg, err := svc.GetInstanceConfig(context.Background(), "c1")
 	if err != nil {
@@ -414,7 +421,7 @@ func TestUpdateInstanceConfig_RejectRunning(t *testing.T) {
 		},
 	}
 
-	svc := NewDockerService(cli, newFakeInstanceStore(), &fakeRegistry{})
+	svc := newTestDockerService(t, cli, newFakeInstanceStore(), &fakeRegistry{})
 
 	_, err := svc.UpdateInstanceConfig(context.Background(), "c1", map[string]string{"MAX_PLAYERS": "50"}, nil, nil)
 	if !errors.Is(err, model.ErrContainerNotStopped) {
@@ -463,7 +470,7 @@ func TestUpdateInstanceConfig_Success(t *testing.T) {
 	}
 	store := newFakeInstanceStore(model.Instance{ContainerID: "old-id", Name: "server-1", GameID: "minecraft-java", Status: "Stopped"})
 
-	svc := NewDockerService(cli, store, registry)
+	svc := newTestDockerService(t, cli, store, registry)
 
 	newID, err := svc.UpdateInstanceConfig(context.Background(), "old-id", map[string]string{
 		"SERVER_TYPE": "FABRIC",
@@ -532,7 +539,7 @@ func TestUpdateInstanceConfig_InvalidParams(t *testing.T) {
 		},
 	}
 
-	svc := NewDockerService(cli, newFakeInstanceStore(), registry)
+	svc := newTestDockerService(t, cli, newFakeInstanceStore(), registry)
 
 	_, err := svc.UpdateInstanceConfig(context.Background(), "c1", map[string]string{"MAX_PLAYERS": "NaN??"}, nil, nil)
 	if !errors.Is(err, model.ErrInvalidParams) {
@@ -555,7 +562,7 @@ func TestUpdateInstanceConfig_InvalidPorts(t *testing.T) {
 		},
 	}
 
-	svc := NewDockerService(cli, newFakeInstanceStore(), registry)
+	svc := newTestDockerService(t, cli, newFakeInstanceStore(), registry)
 
 	_, err := svc.UpdateInstanceConfig(context.Background(), "c1", map[string]string{}, []model.PortMapping{{
 		Host:      19132,
@@ -585,7 +592,7 @@ func TestCreateInstance_UsesTemplateResources(t *testing.T) {
 		},
 	}
 
-	svc := NewDockerService(cli, store, registry)
+	svc := newTestDockerService(t, cli, store, registry)
 
 	_, err := svc.CreateInstance(context.Background(), "server-1", "minecraft-java", map[string]string{}, nil, nil)
 	if err != nil {
@@ -654,7 +661,7 @@ func TestCreateInstance_OverrideResources(t *testing.T) {
 		},
 	}
 
-	svc := NewDockerService(cli, store, registry)
+	svc := newTestDockerService(t, cli, store, registry)
 
 	_, err := svc.CreateInstance(
 		context.Background(),
@@ -692,7 +699,7 @@ func TestCreateInstance_InvalidResources(t *testing.T) {
 		},
 	}
 
-	svc := NewDockerService(cli, store, registry)
+	svc := newTestDockerService(t, cli, store, registry)
 
 	_, err := svc.CreateInstance(
 		context.Background(),
@@ -749,7 +756,7 @@ func TestUpdateInstanceConfig_OverrideResources(t *testing.T) {
 	}
 	store := newFakeInstanceStore(model.Instance{ContainerID: "old-id", Name: "server-1", GameID: "minecraft-java", Status: "Stopped"})
 
-	svc := NewDockerService(cli, store, registry)
+	svc := newTestDockerService(t, cli, store, registry)
 
 	_, err = svc.UpdateInstanceConfig(
 		context.Background(),
@@ -782,7 +789,7 @@ func TestListInstances_IncludesGameID(t *testing.T) {
 		}},
 	}
 	store := newFakeInstanceStore()
-	svc := NewDockerService(cli, store, &fakeRegistry{})
+	svc := newTestDockerService(t, cli, store, &fakeRegistry{})
 
 	instances, err := svc.ListInstances(context.Background())
 	if err != nil {

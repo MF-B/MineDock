@@ -40,3 +40,6 @@ var ErrFileNotFound = errors.New("file not found")
 
 // ErrUploadTooLarge 表示上传文件超过服务端大小限制。
 var ErrUploadTooLarge = errors.New("upload file too large")
+
+// ErrPortUnavailable 表示宿主机端口已被占用。
+var ErrPortUnavailable = errors.New("host port is unavailable")

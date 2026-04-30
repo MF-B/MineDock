@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS instances (
 	container_id TEXT PRIMARY KEY,
 	name TEXT NOT NULL UNIQUE,
 	game_id TEXT NOT NULL DEFAULT '',
+	config_path TEXT NOT NULL DEFAULT '',
+	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 `
@@ -76,6 +78,12 @@ CREATE TABLE IF NOT EXISTS instances (
 		return fmt.Errorf("init instances table: %w", err)
 	}
 	if err := s.ensureGameIDColumn(ctx); err != nil {
+		return err
+	}
+	if err := s.ensureConfigPathColumn(ctx); err != nil {
+		return err
+	}
+	if err := s.ensureUpdatedAtColumn(ctx); err != nil {
 		return err
 	}
 	return nil
@@ -88,7 +96,7 @@ ADD COLUMN game_id TEXT NOT NULL DEFAULT '';
 `
 
 	if _, err := s.db.ExecContext(ctx, addGameIDColumn); err != nil {
-		if isDuplicateColumnErr(err) {
+		if isDuplicateColumnErr(err, "game_id") {
 			return nil
 		}
 		return fmt.Errorf("ensure instances.game_id column: %w", err)
@@ -97,18 +105,52 @@ ADD COLUMN game_id TEXT NOT NULL DEFAULT '';
 	return nil
 }
 
+func (s *SQLiteStore) ensureConfigPathColumn(ctx context.Context) error {
+	const addConfigPathColumn = `
+ALTER TABLE instances
+ADD COLUMN config_path TEXT NOT NULL DEFAULT '';
+`
+
+	if _, err := s.db.ExecContext(ctx, addConfigPathColumn); err != nil {
+		if isDuplicateColumnErr(err, "config_path") {
+			return nil
+		}
+		return fmt.Errorf("ensure instances.config_path column: %w", err)
+	}
+
+	return nil
+}
+
+func (s *SQLiteStore) ensureUpdatedAtColumn(ctx context.Context) error {
+	const addUpdatedAtColumn = `
+ALTER TABLE instances
+ADD COLUMN updated_at DATETIME NOT NULL DEFAULT '';
+`
+
+	if _, err := s.db.ExecContext(ctx, addUpdatedAtColumn); err != nil {
+		if isDuplicateColumnErr(err, "updated_at") {
+			return nil
+		}
+		return fmt.Errorf("ensure instances.updated_at column: %w", err)
+	}
+
+	return nil
+}
+
 // Save 按容器 ID 执行实例记录的 upsert。
 func (s *SQLiteStore) Save(ctx context.Context, instance model.Instance) error {
 	const upsert = `
-INSERT INTO instances(container_id, name, game_id)
-VALUES(?, ?, ?)
+INSERT INTO instances(container_id, name, game_id, config_path, updated_at)
+VALUES(?, ?, ?, ?, CURRENT_TIMESTAMP)
 ON CONFLICT(container_id)
 DO UPDATE SET
 	name = excluded.name,
-	game_id = excluded.game_id;
+	game_id = excluded.game_id,
+	config_path = excluded.config_path,
+	updated_at = CURRENT_TIMESTAMP;
 `
 
-	_, err := s.db.ExecContext(ctx, upsert, instance.ContainerID, instance.Name, instance.GameID)
+	_, err := s.db.ExecContext(ctx, upsert, instance.ContainerID, instance.Name, instance.GameID, instance.ConfigPath)
 	if err != nil {
 		if isUniqueNameErr(err) {
 			return model.ErrNameExists
@@ -131,12 +173,13 @@ func (s *SQLiteStore) Delete(ctx context.Context, containerID string) error {
 func (s *SQLiteStore) Get(ctx context.Context, containerID string) (model.Instance, bool, error) {
 	const q = `
 SELECT container_id, name, game_id
+	, config_path
 FROM instances
 WHERE container_id = ?;
 `
 
 	var inst model.Instance
-	err := s.db.QueryRowContext(ctx, q, containerID).Scan(&inst.ContainerID, &inst.Name, &inst.GameID)
+	err := s.db.QueryRowContext(ctx, q, containerID).Scan(&inst.ContainerID, &inst.Name, &inst.GameID, &inst.ConfigPath)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Instance{}, false, nil
 	}
@@ -150,6 +193,7 @@ WHERE container_id = ?;
 func (s *SQLiteStore) List(ctx context.Context) ([]model.Instance, error) {
 	const q = `
 SELECT container_id, name, game_id
+	, config_path
 FROM instances
 ORDER BY created_at DESC;
 `
@@ -163,7 +207,7 @@ ORDER BY created_at DESC;
 	out := make([]model.Instance, 0)
 	for rows.Next() {
 		var inst model.Instance
-		if err := rows.Scan(&inst.ContainerID, &inst.Name, &inst.GameID); err != nil {
+		if err := rows.Scan(&inst.ContainerID, &inst.Name, &inst.GameID, &inst.ConfigPath); err != nil {
 			return nil, fmt.Errorf("scan instance: %w", err)
 		}
 		out = append(out, inst)
@@ -187,10 +231,10 @@ func isUniqueNameErr(err error) bool {
 	return strings.Contains(errStr, "UNIQUE constraint failed: instances.name")
 }
 
-func isDuplicateColumnErr(err error) bool {
+func isDuplicateColumnErr(err error, column string) bool {
 	if err == nil {
 		return false
 	}
 	errStr := strings.ToLower(err.Error())
-	return strings.Contains(errStr, "duplicate column name") && strings.Contains(errStr, "game_id")
+	return strings.Contains(errStr, "duplicate column name") && strings.Contains(errStr, strings.ToLower(column))
 }

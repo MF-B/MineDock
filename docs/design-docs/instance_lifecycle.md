@@ -14,6 +14,8 @@ type Instance struct {
     GameID      string `json:"game_id"`
     // 当前运行态
     Status      string `json:"status"`
+    // 实例期望配置文件路径
+    ConfigPath  string `json:"config_path,omitempty"`
 }
 ```
 
@@ -24,7 +26,24 @@ type Instance struct {
 - `name`（唯一）
 - `status`
 - `game_id`
+- `config_path`
 - `created_at`
+- `updated_at`
+
+### 实例配置文件
+
+每个实例目录保存 `minedock.instance.json`，它是 MineDock 的期望配置事实来源：
+
+```text
+MINEDOCK_DATA_DIR/{instanceName}/minedock.instance.json
+MINEDOCK_DATA_DIR/{instanceName}/volumes/{volumeName}/
+```
+
+写入规则：
+
+- 同一实例配置写入必须串行化。
+- 使用 `minedock.instance.json.tmp` 写入并 `os.Rename` 原子替换。
+- Docker Inspect 只作为运行态对账和旧实例回退，不作为配置事实来源。
 
 ## 接口
 
@@ -45,15 +64,18 @@ stateDiagram-v2
 - 端口映射来源：模板 `container.ports`，创建容器时写入 Docker `ExposedPorts` 与 `PortBindings`。
 - 卷挂载来源：模板 `container.volumes`，采用 bind mount 映射到 `MINEDOCK_DATA_DIR/{instanceName}/volumes/{volumeName}`。
 - 启动命令来源：若模板配置了 `container.command` 则覆盖镜像命令；否则使用镜像默认 `ENTRYPOINT/CMD`。
+- 创建流程：模板与用户输入先经 resolver 生成 `minedock.instance.json`，再由该配置生成 Docker 容器。
+- 端口预检：创建/重建前会尝试监听宿主机端口，提前拦截非 Docker 进程造成的端口占用；Docker 创建/启动错误仍需兜底处理。
 
 ## 在线配置修改
 
-- 修改范围：允许编辑模板 `params` 定义的用户参数，以及模板端口映射对应的宿主机端口；模板固定环境变量 `container.env` 不可直接修改。
-- 变更方式：通过重建容器应用新配置，流程为 `Inspect -> Remove(old) -> Create(new env + port bindings)`。
+- 修改范围：允许编辑实例配置文件暴露的参数、端口、资源与游戏专用配置。
+- 变更方式：通过重建容器应用新配置，流程为 `Load desired config -> Validate -> Save config -> Remove(old) -> Create(from config)`。
 - 状态约束：仅允许在 Stopped 状态下执行配置更新，运行中返回冲突错误。
 - 生效方式：更新完成后容器保持 Stopped，需用户手动启动使配置生效。
 - 保留策略：按实例名称复用 bind mount 宿主机目录，并应用最新模板卷配置。
 - 标识变化：重建后 `container_id` 会变化，前端需跳转到新的详情路由。
+- 漂移处理：若用户绕过 MineDock 修改 Docker 容器，下一次面板保存并重建会以 `minedock.instance.json` 覆盖 Docker 实际状态。
 
 ## 一致性策略
 
