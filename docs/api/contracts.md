@@ -388,15 +388,17 @@
 
 ### GET /api/ws/console/:id (WebSocket)
 
-- 说明：建立 WebSocket 连接，双向桥接容器主进程的 stdin/stdout/stderr
+- 说明：建立 WebSocket 连接，展示容器控制台输出；运行中容器同时桥接主进程 stdin
 - 协议：WebSocket（HTTP Upgrade）
-- 前置条件：容器必须处于 Running 状态
 - 路径参数：`id`（容器 ID）
 - 数据流向：
   - 服务端 -> 客户端：容器 stdout/stderr 输出（Binary 帧）
-  - 客户端 -> 服务端：用户输入命令（Text/Binary 帧，原样写入容器 stdin）
+  - 客户端 -> 服务端：运行中容器接收用户输入命令（Text/Binary 帧，原样写入容器 stdin）
+- 状态行为：
+  - Running：先发送 Docker 已保留日志，再持续转发实时 stdout/stderr，并允许输入命令
+  - Stopped/Exited：发送 Docker 历史日志后正常关闭 WebSocket，页面保留旧日志用于排查崩溃原因
 - TTY 自适应：
   - TTY 容器：直接转发输出流
   - 非 TTY 容器：服务端使用 Docker 多路复用解复用后再转发
-- 连接关闭时机：客户端断开、容器退出、服务端关闭连接
-- 失败行为：容器不存在或未运行时，服务端在升级后主动关闭连接并返回原因
+- 连接关闭时机：客户端断开、容器退出、历史日志发送完成、服务端关闭连接
+- 失败行为：容器不存在或日志读取失败时，服务端在升级后主动关闭连接并返回原因

@@ -15,7 +15,7 @@
     "back": "Back to List",
     "loading": "Loading container state...",
     "instanceNotFound": "Container not found or already removed.",
-    "instanceNotRunning": "Container is not running. Start it before opening the console.",
+    "instanceNotRunning": "Container is not running. Historical logs are shown.",
     "connected": "Console connected",
     "disconnectedLabel": "Console disconnected",
     "connectionError": "Failed to connect to console. Refresh and try again.",

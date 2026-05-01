@@ -9,14 +9,16 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/pkg/stdcopy"
+
+	"minedock/backend/internal/service"
 )
 
 const consoleWriteTimeout = 3 * time.Second
 
-// ContainerConsole 定义控制台处理器依赖的 Attach 能力。
+// ContainerConsole 定义控制台处理器依赖的会话打开能力。
 type ContainerConsole interface {
-	Attach(ctx context.Context, containerID string) (types.HijackedResponse, error)
+	Open(ctx context.Context, containerID string) (*service.ConsoleSession, error)
 }
 
 // ConsoleHandler 暴露容器控制台 WebSocket 处理器。
@@ -47,7 +49,7 @@ func (h *ConsoleHandler) HandleConsole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hijacked, err := h.console.Attach(r.Context(), id)
+	session, err := h.console.Open(r.Context(), id)
 	if err != nil {
 		_ = conn.Close(websocket.StatusPolicyViolation, err.Error())
 		return
@@ -55,44 +57,51 @@ func (h *ConsoleHandler) HandleConsole(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	defer hijacked.Close()
+	defer session.Close()
 
 	errCh := make(chan error, 2)
 
 	go func() {
-		errCh <- pipeDockerToWebSocket(ctx, conn, hijacked)
+		errCh <- pipeConsoleToWebSocket(ctx, conn, session)
 	}()
 
-	go func() {
-		errCh <- pipeWebSocketToDocker(ctx, conn, hijacked)
-	}()
+	if session.Input != nil {
+		go func() {
+			errCh <- pipeWebSocketToConsole(ctx, conn, session.Input)
+		}()
+	}
 
 	if err := <-errCh; err != nil {
 		if code := websocket.CloseStatus(err); code == websocket.StatusNormalClosure || code == websocket.StatusGoingAway {
-			_ = conn.Close(websocket.StatusNormalClosure, "closed")
+			_ = conn.Close(websocket.StatusNormalClosure, "")
 			return
 		}
 		_ = conn.Close(websocket.StatusInternalError, "console bridge failed")
 		return
 	}
 
-	_ = conn.Close(websocket.StatusNormalClosure, "closed")
+	_ = conn.Close(websocket.StatusNormalClosure, "")
 }
 
-func pipeDockerToWebSocket(
+func pipeConsoleToWebSocket(
 	ctx context.Context,
 	conn *websocket.Conn,
-	hijacked types.HijackedResponse,
+	session *service.ConsoleSession,
 ) error {
 	writer := &wsBinaryWriter{ctx: ctx, conn: conn}
-	_, err := io.Copy(writer, hijacked.Reader)
+	var err error
+	if session.TTY {
+		_, err = io.Copy(writer, session.Output)
+	} else {
+		_, err = stdcopy.StdCopy(writer, writer, session.Output)
+	}
 	if errors.Is(err, io.EOF) {
 		return nil
 	}
 	return err
 }
 
-func pipeWebSocketToDocker(ctx context.Context, conn *websocket.Conn, hijacked types.HijackedResponse) error {
+func pipeWebSocketToConsole(ctx context.Context, conn *websocket.Conn, input io.Writer) error {
 	for {
 		typ, data, err := conn.Read(ctx)
 		if err != nil {
@@ -107,7 +116,7 @@ func pipeWebSocketToDocker(ctx context.Context, conn *websocket.Conn, hijacked t
 			continue
 		}
 
-		if _, err := hijacked.Conn.Write(data); err != nil {
+		if _, err := input.Write(data); err != nil {
 			return fmt.Errorf("write stdin: %w", err)
 		}
 	}

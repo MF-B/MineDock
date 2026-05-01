@@ -164,6 +164,9 @@ export function useConsole(containerId: Ref<string>): {
         return;
       }
       connected.value = false;
+      if (event.code === 1000) {
+        return;
+      }
       if (event.reason) {
         error.value = event.reason;
         return;
