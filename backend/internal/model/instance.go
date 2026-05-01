@@ -6,4 +6,5 @@ type Instance struct {
 	Name        string `json:"name"`
 	GameID      string `json:"game_id"`
 	Status      string `json:"status"`
+	ConfigPath  string `json:"config_path,omitempty"`
 }

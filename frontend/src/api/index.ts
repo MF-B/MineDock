@@ -22,6 +22,7 @@ type JsonObject = Record<string, unknown>;
 interface RequestOptions extends Omit<RequestInit, "headers" | "body"> {
   headers?: HeadersInit;
   body?: BodyInit | JsonObject | null;
+  timeoutMs?: number;
 }
 
 export interface ApiRequestErrorInfo {
@@ -61,7 +62,7 @@ function getResponseBackendError(data: unknown): string | undefined {
 
 async function request<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
   // 统一处理请求体序列化、默认请求头和非 2xx 错误转换。
-  const { headers: customHeaders, body, ...rest } = options;
+  const { headers: customHeaders, body, timeoutMs = 30000, signal, ...rest } = options;
   const headers = new Headers(customHeaders);
 
   let finalBody: BodyInit | undefined;
@@ -80,15 +81,29 @@ async function request<T = unknown>(path: string, options: RequestOptions = {}):
     headers.set("Accept", "application/json");
   }
 
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  let timeoutID: ReturnType<typeof setTimeout> | undefined;
+  if (controller && timeoutMs > 0) {
+    timeoutID = setTimeout(() => controller.abort(), timeoutMs);
+  }
+
   let resp: Response;
   try {
     resp = await fetch(`${BASE_URL}${path}`, {
       ...rest,
       headers,
       body: finalBody,
+      signal: signal ?? controller?.signal,
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiRequestError({ key: "errors.timeout" });
+    }
     throw new ApiRequestError({ key: "errors.network" });
+  } finally {
+    if (timeoutID !== undefined) {
+      clearTimeout(timeoutID);
+    }
   }
 
   const data: unknown = await resp.json().catch(() => ({}));
@@ -112,9 +127,11 @@ export interface Instance {
 export interface InstanceConfig {
   game_id: string;
   status: string;
+  image?: string;
   ports: PortMapping[];
   params: Record<string, string>;
   resources?: ResourceLimits;
+  game_config?: Record<string, string>;
 }
 
 export interface UpdateConfigResponse {
@@ -170,6 +187,16 @@ export interface FileEntry {
 export interface ResourceLimits {
   memory: string;
   cpu: number;
+}
+
+export interface MinecraftVersionOption {
+  id: string;
+  type: string;
+}
+
+export interface MinecraftLoaderVersionOption {
+  version: string;
+  stable?: boolean;
 }
 
 export interface ServerCPUMetrics {
@@ -269,6 +296,21 @@ export function getGameTemplate(id: string): Promise<GameTemplate> {
   return request<GameTemplate>(`/games/${encodeURIComponent(id)}/template`, { method: "GET" });
 }
 
+export function listMinecraftVersions(): Promise<MinecraftVersionOption[]> {
+  return request<MinecraftVersionOption[]>("/games/minecraft-java/versions", { method: "GET" });
+}
+
+export function listMinecraftLoaderVersions(
+  mcVersion: string,
+  serverType: string,
+): Promise<MinecraftLoaderVersionOption[]> {
+  const query = new URLSearchParams({ mc_version: mcVersion, server_type: serverType });
+  return request<MinecraftLoaderVersionOption[]>(
+    `/games/minecraft-java/loader-versions?${query.toString()}`,
+    { method: "GET" },
+  );
+}
+
 export function createInstance(
   name: string,
   gameId: string,
@@ -279,6 +321,7 @@ export function createInstance(
   return request("/instances", {
     method: "POST",
     body: { name, game_id: gameId, params, ports, resources },
+    timeoutMs: 10 * 60 * 1000,
   });
 }
 

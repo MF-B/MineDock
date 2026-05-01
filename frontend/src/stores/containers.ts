@@ -28,6 +28,7 @@ const backendMessageKeyMap: Record<string, string> = {
   "instance is running, stop it before delete": "errors.instanceRunning",
   "container must be stopped to update config": "errors.containerNotStopped",
   "invalid resource limits": "errors.invalidResourceLimits",
+  "host port is unavailable": "errors.portUnavailable",
 };
 
 function mapBackendMessageToKey(message: string): string | undefined {
@@ -48,6 +49,9 @@ function mapBackendMessageToKey(message: string): string | undefined {
   }
   if (normalized.includes("invalid template")) {
     return "errors.templateInvalid";
+  }
+  if (normalized.includes("host port") && normalized.includes("unavailable")) {
+    return "errors.portUnavailable";
   }
 
   return undefined;
@@ -95,6 +99,10 @@ export const useContainerStore = defineStore("containers", () => {
   // 统一将底层异常映射为稳定的 i18n key，避免泄露网络/后端原始文案。
   function mapErrorToI18n(error: unknown): OutputI18nPayload {
     if (error instanceof ApiRequestError) {
+      if (error.key === "errors.timeout") {
+        return { key: "errors.timeout" };
+      }
+
       if (error.backendMessage) {
         const mappedKey = mapBackendMessageToKey(error.backendMessage);
         if (mappedKey) {

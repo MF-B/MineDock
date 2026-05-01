@@ -27,6 +27,8 @@ func (s *DockerService) ensureImage(ctx context.Context, imageName string) error
 		return fmt.Errorf("pull image: %w", err)
 	}
 	defer rc.Close()
-	_, _ = io.Copy(io.Discard, rc)
+	if _, err := io.Copy(io.Discard, rc); err != nil {
+		return fmt.Errorf("read image pull stream: %w", err)
+	}
 	return nil
 }

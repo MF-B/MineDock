@@ -18,11 +18,12 @@ import (
 )
 
 const (
-	managedLabelKey   = "minedock.managed"
-	managedLabelValue = "true"
-	nameLabelKey      = "minedock.name"
-	gameIDLabelKey    = "minedock.game_id"
-	defaultDataDir    = "data/instances"
+	managedLabelKey    = "minedock.managed"
+	managedLabelValue  = "true"
+	nameLabelKey       = "minedock.name"
+	gameIDLabelKey     = "minedock.game_id"
+	configPathLabelKey = "minedock.config_path"
+	defaultDataDir     = "data/instances"
 )
 
 // dockerClient 定义 DockerService 依赖的 Docker API。
@@ -59,19 +60,23 @@ type GameRegistry interface {
 
 // InstanceConfig 描述容器当前生效的可编辑配置。
 type InstanceConfig struct {
-	GameID    string                `json:"game_id"`
-	Status    string                `json:"status"`
-	Ports     []model.PortMapping   `json:"ports"`
-	Params    map[string]string     `json:"params"`
-	Resources *model.ResourceLimits `json:"resources,omitempty"`
+	GameID     string                `json:"game_id"`
+	Status     string                `json:"status"`
+	Image      string                `json:"image,omitempty"`
+	Ports      []model.PortMapping   `json:"ports"`
+	Params     map[string]string     `json:"params"`
+	Resources  *model.ResourceLimits `json:"resources,omitempty"`
+	GameConfig map[string]string     `json:"game_config,omitempty"`
 }
 
 // DockerService 封装容器管理相关业务逻辑。
 type DockerService struct {
-	cli      dockerClient
-	store    InstanceStore
-	registry GameRegistry
-	dataDir  string
+	cli         dockerClient
+	store       InstanceStore
+	registry    GameRegistry
+	dataDir     string
+	configStore *InstanceConfigFileStore
+	checkPorts  func([]model.PortMapping) error
 }
 
 // NewDockerService 使用依赖项创建 DockerService。
@@ -85,7 +90,14 @@ func NewDockerServiceWithDataDir(cli dockerClient, s InstanceStore, registry Gam
 	if dataDir == "" {
 		dataDir = defaultDataDir
 	}
-	return &DockerService{cli: cli, store: s, registry: registry, dataDir: dataDir}
+	return &DockerService{
+		cli:         cli,
+		store:       s,
+		registry:    registry,
+		dataDir:     dataDir,
+		configStore: NewInstanceConfigFileStore(dataDir),
+		checkPorts:  checkPortsAvailable,
+	}
 }
 
 // CreateInstance 创建托管容器并持久化实例元数据。
@@ -111,26 +123,32 @@ func (s *DockerService) CreateInstance(
 		return "", err
 	}
 
-	env, err := mergeTemplateEnv(tpl, params)
+	desired, err := resolveInstanceCreateConfig(tpl, game, params, ports, resources)
 	if err != nil {
 		return "", err
 	}
 
-	imageRef := tpl.Image.FullImageRef()
-	if strings.TrimSpace(imageRef) == "" {
+	if strings.TrimSpace(desired.Image) == "" {
 		return "", model.ErrTemplateInvalid
 	}
 
-	if err := s.ensureImage(ctx, imageRef); err != nil {
+	if err := s.checkPorts(desired.Ports); err != nil {
 		return "", err
 	}
 
-	resolvedPorts, err := resolveConfigPorts(tpl.Container.Ports, nil, ports)
+	configPath, err := s.configStore.ConfigPath(name)
 	if err != nil {
 		return "", err
 	}
+	if err := s.configStore.Save(ctx, configPath, desired); err != nil {
+		return "", err
+	}
 
-	exposedPorts, portBindings := buildPortBindings(resolvedPorts)
+	if err := s.ensureImage(ctx, desired.Image); err != nil {
+		return "", err
+	}
+
+	exposedPorts, portBindings := buildPortBindings(desired.Ports)
 	cmd := []string(nil)
 	if len(tpl.Container.Command) > 0 {
 		cmd = append(cmd, tpl.Container.Command...)
@@ -144,18 +162,14 @@ func (s *DockerService) CreateInstance(
 		PortBindings: portBindings,
 		Binds:        binds,
 	}
-	effectiveResources := tpl.Container.Resources
-	if resources != nil {
-		effectiveResources = resources
-	}
-	if err := applyResourceLimits(hostConfig, effectiveResources); err != nil {
+	if err := applyResourceLimits(hostConfig, desired.Resources); err != nil {
 		return "", err
 	}
 
 	resp, err := s.cli.ContainerCreate(ctx, &container.Config{
-		Image:        imageRef,
+		Image:        desired.Image,
 		Cmd:          cmd,
-		Env:          mapToDockerEnv(env),
+		Env:          mapToDockerEnv(desired.Env),
 		ExposedPorts: exposedPorts,
 		Tty:          true,
 		AttachStdin:  true,
@@ -164,16 +178,17 @@ func (s *DockerService) CreateInstance(
 		OpenStdin:    true,
 		StdinOnce:    false,
 		Labels: map[string]string{
-			managedLabelKey: managedLabelValue,
-			nameLabelKey:    name,
-			gameIDLabelKey:  game.ID,
+			managedLabelKey:    managedLabelValue,
+			nameLabelKey:       name,
+			gameIDLabelKey:     game.ID,
+			configPathLabelKey: configPath,
 		},
 	}, hostConfig, nil, nil, "")
 	if err != nil {
 		return "", fmt.Errorf("create container: %w", err)
 	}
 
-	inst := model.Instance{ContainerID: resp.ID, Name: name, GameID: game.ID, Status: "Stopped"}
+	inst := model.Instance{ContainerID: resp.ID, Name: name, GameID: game.ID, Status: "Stopped", ConfigPath: configPath}
 	if err := s.store.Save(ctx, inst); err != nil {
 		// 说明：请求上下文取消时，清理逻辑会使用独立上下文做尽力回收。
 		_ = s.cli.ContainerRemove(context.Background(), resp.ID, container.RemoveOptions{Force: true})
@@ -207,6 +222,10 @@ func (s *DockerService) GetInstanceConfig(ctx context.Context, containerID strin
 		return nil, err
 	}
 
+	if stored, ok := s.loadStoredConfig(ctx, inspect, containerID); ok {
+		return editableConfigFromStored(stored, tpl, instanceStatusFromState(inspect.State)), nil
+	}
+
 	ports, err := resolveConfigPorts(tpl.Container.Ports, inspect.HostConfig, nil)
 	if err != nil {
 		return nil, err
@@ -233,6 +252,7 @@ func (s *DockerService) GetInstanceConfig(ctx context.Context, containerID strin
 	return &InstanceConfig{
 		GameID:    gameID,
 		Status:    instanceStatusFromState(inspect.State),
+		Image:     inspect.Config.Image,
 		Ports:     ports,
 		Params:    params,
 		Resources: readResourceLimits(inspect.HostConfig),
@@ -271,18 +291,9 @@ func (s *DockerService) UpdateInstanceConfig(
 	if err != nil {
 		return "", err
 	}
-
-	env, err := mergeTemplateEnv(tpl, newParams)
-	if err != nil {
-		return "", err
+	if strings.TrimSpace(tpl.Image.Name) == "" && strings.TrimSpace(inspect.Config.Image) != "" {
+		tpl.Image = templateImageFromRef(inspect.Config.Image)
 	}
-
-	ports, err := resolveConfigPorts(tpl.Container.Ports, inspect.HostConfig, newPorts)
-	if err != nil {
-		return "", err
-	}
-
-	exposedPorts, portBindings := buildPortBindings(ports)
 
 	containerName := strings.TrimPrefix(inspect.Name, "/")
 	instanceName := strings.TrimSpace(inspect.Config.Labels[nameLabelKey])
@@ -293,17 +304,61 @@ func (s *DockerService) UpdateInstanceConfig(
 		instanceName = containerID
 	}
 
+	ports := newPorts
+	if len(ports) == 0 {
+		ports, err = resolveConfigPorts(tpl.Container.Ports, inspect.HostConfig, nil)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	resolvedResources := newResources
+	if resolvedResources == nil {
+		if stored, ok := s.loadStoredConfig(ctx, inspect, containerID); ok && stored.Resources != nil {
+			resolvedResources = stored.Resources
+		} else {
+			resolvedResources = readResourceLimits(inspect.HostConfig)
+		}
+	}
+
+	desired, err := resolveInstanceCreateConfig(tpl, model.Game{ID: gameID}, newParams, ports, resolvedResources)
+	if err != nil {
+		return "", err
+	}
+
+	if err := s.checkPorts(desired.Ports); err != nil {
+		return "", err
+	}
+
+	configPath := strings.TrimSpace(inspect.Config.Labels[configPathLabelKey])
+	if configPath == "" {
+		if inst, ok, err := s.store.Get(ctx, containerID); err == nil && ok {
+			configPath = strings.TrimSpace(inst.ConfigPath)
+		}
+	}
+	if configPath == "" {
+		configPath, err = s.configStore.ConfigPath(instanceName)
+		if err != nil {
+			return "", err
+		}
+	}
+	if err := s.configStore.Save(ctx, configPath, desired); err != nil {
+		return "", err
+	}
+
+	if err := s.ensureImage(ctx, desired.Image); err != nil {
+		return "", err
+	}
+
+	exposedPorts, portBindings := buildPortBindings(desired.Ports)
+
 	binds, err := buildBindMounts(s.dataDir, instanceName, tpl.Container.Volumes)
 	if err != nil {
 		return "", err
 	}
 	hostConfig := &container.HostConfig{Binds: binds}
 	hostConfig.PortBindings = portBindings
-	resolvedResources := readResourceLimits(inspect.HostConfig)
-	if newResources != nil {
-		resolvedResources = newResources
-	}
-	if err := applyResourceLimits(hostConfig, resolvedResources); err != nil {
+	if err := applyResourceLimits(hostConfig, desired.Resources); err != nil {
 		return "", err
 	}
 
@@ -311,15 +366,16 @@ func (s *DockerService) UpdateInstanceConfig(
 	labels[managedLabelKey] = managedLabelValue
 	labels[nameLabelKey] = instanceName
 	labels[gameIDLabelKey] = gameID
+	labels[configPathLabelKey] = configPath
 
 	if err := s.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: false}); err != nil {
 		return "", fmt.Errorf("remove old container: %w", err)
 	}
 
 	resp, err := s.cli.ContainerCreate(ctx, &container.Config{
-		Image:        inspect.Config.Image,
+		Image:        desired.Image,
 		Cmd:          append([]string(nil), inspect.Config.Cmd...),
-		Env:          mapToDockerEnv(env),
+		Env:          mapToDockerEnv(desired.Env),
 		ExposedPorts: exposedPorts,
 		Tty:          inspect.Config.Tty,
 		AttachStdin:  inspect.Config.AttachStdin,
@@ -338,6 +394,7 @@ func (s *DockerService) UpdateInstanceConfig(
 		Name:        instanceName,
 		GameID:      gameID,
 		Status:      "Stopped",
+		ConfigPath:  configPath,
 	}
 
 	if err := s.store.Delete(ctx, containerID); err != nil {
@@ -409,11 +466,18 @@ func (s *DockerService) ListInstances(ctx context.Context) ([]model.Instance, er
 		if strings.EqualFold(c.State, "running") {
 			status = "Running"
 		}
+		configPath := strings.TrimSpace(c.Labels[configPathLabelKey])
+		if configPath == "" {
+			if existing, ok, err := s.store.Get(ctx, c.ID); err == nil && ok {
+				configPath = strings.TrimSpace(existing.ConfigPath)
+			}
+		}
 		inst := model.Instance{
 			ContainerID: c.ID,
 			Name:        name,
 			GameID:      gameID,
 			Status:      status,
+			ConfigPath:  configPath,
 		}
 		// 说明：当前 Save 为尽力而为，避免影响列表返回。
 		// TODO: 在不影响列表返回的前提下上报同步失败。
@@ -476,6 +540,80 @@ func (s *DockerService) removeInstanceData(instanceName string) error {
 	return nil
 }
 
+func (s *DockerService) loadStoredConfig(
+	ctx context.Context,
+	inspect container.InspectResponse,
+	containerID string,
+) (*model.StoredInstanceConfig, bool) {
+	configPath := ""
+	if inspect.Config != nil {
+		configPath = strings.TrimSpace(inspect.Config.Labels[configPathLabelKey])
+	}
+	if configPath == "" {
+		inst, ok, err := s.store.Get(ctx, containerID)
+		if err == nil && ok {
+			configPath = strings.TrimSpace(inst.ConfigPath)
+		}
+	}
+	if configPath == "" {
+		return nil, false
+	}
+
+	cfg, err := s.configStore.Load(ctx, configPath)
+	if err != nil {
+		return nil, false
+	}
+	return cfg, true
+}
+
+func editableConfigFromStored(
+	cfg *model.StoredInstanceConfig,
+	tpl model.GameTemplate,
+	status string,
+) *InstanceConfig {
+	params := make(map[string]string, len(tpl.Params))
+	env := cfg.Env
+	if env == nil {
+		env = map[string]string{}
+	}
+	for _, param := range tpl.Params {
+		envKey := strings.TrimSpace(param.EnvVar)
+		if envKey == "" {
+			envKey = param.Key
+		}
+		value, ok := env[envKey]
+		if !ok {
+			if defaultValue, hasDefault := stringifyTemplateDefault(param); hasDefault {
+				value = defaultValue
+			}
+		}
+		params[param.Key] = value
+	}
+
+	return &InstanceConfig{
+		GameID:     cfg.GameID,
+		Status:     status,
+		Image:      cfg.Image,
+		Ports:      append([]model.PortMapping(nil), cfg.Ports...),
+		Params:     params,
+		Resources:  cfg.Resources,
+		GameConfig: copyStringMap(cfg.GameConfig),
+	}
+}
+
+func templateImageFromRef(imageRef string) model.TemplateImage {
+	ref := strings.TrimSpace(imageRef)
+	if ref == "" {
+		return model.TemplateImage{}
+	}
+	lastSlash := strings.LastIndex(ref, "/")
+	lastColon := strings.LastIndex(ref, ":")
+	if lastColon > lastSlash {
+		return model.TemplateImage{Name: ref[:lastColon], Tag: ref[lastColon+1:]}
+	}
+	return model.TemplateImage{Name: ref}
+}
+
 func safeInstanceDataDir(baseDir, instanceName string) (string, error) {
 	baseAbs, err := filepath.Abs(baseDir)
 	if err != nil {
@@ -536,5 +674,13 @@ func (s *DockerService) readInstance(ctx context.Context, containerID string, fa
 		}
 	}
 
-	return model.Instance{ContainerID: containerID, Name: name, GameID: gameID, Status: status}, nil
+	configPath := ""
+	if inspect.Config != nil && inspect.Config.Labels != nil {
+		configPath = strings.TrimSpace(inspect.Config.Labels[configPathLabelKey])
+	}
+	if configPath == "" && ok {
+		configPath = strings.TrimSpace(inst.ConfigPath)
+	}
+
+	return model.Instance{ContainerID: containerID, Name: name, GameID: gameID, Status: status, ConfigPath: configPath}, nil
 }

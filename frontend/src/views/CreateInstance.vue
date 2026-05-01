@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import type { GameTemplate, PortMapping, ResourceLimits, TemplateParam } from "../api/index";
+import { listMinecraftLoaderVersions, listMinecraftVersions } from "../api/index";
 import { useGameStore } from "../stores/games";
 import { useContainerStore } from "../stores/containers";
 
@@ -22,6 +23,49 @@ const paramValues = ref<Record<string, string>>({});
 const resourceEnabled = ref(false);
 const resourceMemoryValue = ref(0);
 const resourceCPUValue = ref(0);
+const minecraftVersion = ref("1.21.4");
+const minecraftServerType = ref("");
+const minecraftServerVersion = ref("");
+const minecraftJavaTag = ref("java21");
+const minecraftJavaTouched = ref(false);
+const containerNameTouched = ref(false);
+const minecraftVersionOptions = ref<string[]>([]);
+const minecraftVersionLoading = ref(false);
+const minecraftVersionLoadFailed = ref(false);
+const loaderVersionOptions = ref<string[]>([]);
+const loaderVersionLoading = ref(false);
+const loaderVersionLoadFailed = ref(false);
+const loaderVersionCustom = ref(false);
+
+const fallbackMinecraftVersions = [
+  "1.21.4",
+  "1.21.1",
+  "1.20.6",
+  "1.20.4",
+  "1.20.1",
+  "1.19.4",
+  "1.18.2",
+  "1.17.1",
+  "1.16.5",
+  "1.12.2",
+  "1.12.1",
+];
+
+const minecraftServerTypes = [
+  { value: "", label: "Vanilla" },
+  { value: "PAPER", label: "Paper" },
+  { value: "FABRIC", label: "Fabric" },
+  { value: "FORGE", label: "Forge" },
+  { value: "NEOFORGE", label: "NeoForge" },
+];
+
+const minecraftJavaTags = [
+  { value: "java8", label: "Java 8" },
+  { value: "java16", label: "Java 16" },
+  { value: "java17", label: "Java 17" },
+  { value: "java21", label: "Java 21" },
+  { value: "java25", label: "Java 25" },
+];
 
 const currentGame = computed(() => {
   return gameStore.getGameById(currentGameID.value) ?? null;
@@ -32,6 +76,22 @@ const currentTemplate = computed<GameTemplate | null>(() => {
     return null;
   }
   return gameStore.currentTemplate;
+});
+
+const isMinecraftJava = computed(() => currentGameID.value === "minecraft-java");
+
+const showMinecraftServerVersion = computed(() => {
+  return ["FABRIC", "FORGE", "NEOFORGE"].includes(minecraftServerType.value);
+});
+
+const recommendedMinecraftJavaTag = computed(() => {
+  return recommendMinecraftJavaTag(minecraftVersion.value, minecraftServerType.value);
+});
+
+const selectableMinecraftVersions = computed(() => {
+  return minecraftVersionOptions.value.length > 0
+    ? minecraftVersionOptions.value
+    : fallbackMinecraftVersions;
 });
 
 watch(
@@ -61,6 +121,19 @@ async function initializeForRoute(): Promise<void> {
   resourceEnabled.value = false;
   resourceMemoryValue.value = 0;
   resourceCPUValue.value = 0;
+  minecraftVersion.value = "1.21.4";
+  minecraftServerType.value = "";
+  minecraftServerVersion.value = "";
+  minecraftJavaTag.value = "java21";
+  minecraftJavaTouched.value = false;
+  containerNameTouched.value = false;
+  minecraftVersionOptions.value = [];
+  minecraftVersionLoading.value = false;
+  minecraftVersionLoadFailed.value = false;
+  loaderVersionOptions.value = [];
+  loaderVersionLoading.value = false;
+  loaderVersionLoadFailed.value = false;
+  loaderVersionCustom.value = false;
 
   const gameID = parseRouteGameID(route.params.gameId);
   currentGameID.value = gameID;
@@ -88,6 +161,11 @@ async function initializeForRoute(): Promise<void> {
   try {
     await gameStore.fetchTemplate(gameID, true);
     initParamValuesFromTemplate(currentTemplate.value);
+    initMinecraftDefaults();
+    if (isMinecraftJava.value) {
+      await fetchMinecraftVersions();
+      await fetchLoaderVersions();
+    }
   } catch {
     pageErrorKey.value = "registry.templateLoadError";
   }
@@ -206,6 +284,174 @@ function getDefaultParamValue(param: TemplateParam): string {
   return String(param.default);
 }
 
+function parseMinecraftVersion(raw: string): { major: number; minor: number; patch: number } {
+  const trimmed = raw.trim().toUpperCase();
+  if (!trimmed || trimmed === "LATEST") {
+    return { major: 1, minor: 21, patch: 0 };
+  }
+
+  const values = trimmed.split(".").map((part) => Number(part));
+  if (values.some((value) => !Number.isFinite(value))) {
+    return { major: 1, minor: 21, patch: 0 };
+  }
+
+  return {
+    major: values[0] ?? 1,
+    minor: values[1] ?? 21,
+    patch: values[2] ?? 0,
+  };
+}
+
+function compareMinecraftVersion(
+  a: { major: number; minor: number; patch: number },
+  b: { major: number; minor: number; patch: number },
+): number {
+  if (a.major !== b.major) return a.major - b.major;
+  if (a.minor !== b.minor) return a.minor - b.minor;
+  return a.patch - b.patch;
+}
+
+function recommendMinecraftJavaTag(version: string, serverType: string): string {
+  const parsed = parseMinecraftVersion(version);
+  if (
+    serverType === "FORGE" &&
+    compareMinecraftVersion(parsed, { major: 1, minor: 18, patch: 0 }) < 0
+  ) {
+    return "java8";
+  }
+  if (compareMinecraftVersion(parsed, { major: 1, minor: 16, patch: 5 }) <= 0) {
+    return "java8";
+  }
+  if (parsed.major === 1 && parsed.minor === 17) {
+    return "java16";
+  }
+  if (compareMinecraftVersion(parsed, { major: 1, minor: 20, patch: 4 }) <= 0) {
+    return "java17";
+  }
+  return "java21";
+}
+
+function formatMinecraftServerType(value: string): string {
+  if (!value) {
+    return "Vanilla";
+  }
+  const match = minecraftServerTypes.find((item) => item.value === value);
+  return match?.label ?? value;
+}
+
+function generatedMinecraftName(): string {
+  const version = minecraftVersion.value.trim() || "LATEST";
+  const type = formatMinecraftServerType(minecraftServerType.value);
+  const serverVersion = minecraftServerVersion.value.trim();
+  if (showMinecraftServerVersion.value && serverVersion) {
+    return `${version}-${type}_${serverVersion}`;
+  }
+  return `${version}-${type}`;
+}
+
+function syncMinecraftJavaTag(): void {
+  if (!minecraftJavaTouched.value) {
+    minecraftJavaTag.value = recommendedMinecraftJavaTag.value;
+  }
+}
+
+function syncMinecraftName(): void {
+  if (isMinecraftJava.value && !containerNameTouched.value) {
+    containerName.value = generatedMinecraftName();
+  }
+}
+
+function initMinecraftDefaults(): void {
+  if (!isMinecraftJava.value) {
+    return;
+  }
+  syncMinecraftJavaTag();
+  syncMinecraftName();
+}
+
+async function fetchMinecraftVersions(): Promise<void> {
+  minecraftVersionLoading.value = true;
+  minecraftVersionLoadFailed.value = false;
+  try {
+    const versions = await listMinecraftVersions();
+    const releaseVersions = versions
+      .filter((item) => item.type === "release")
+      .map((item) => item.id)
+      .filter((value) => value.trim().length > 0);
+    const snapshotVersions = versions
+      .filter((item) => item.type !== "release")
+      .map((item) => item.id)
+      .filter((value) => value.trim().length > 0);
+    minecraftVersionOptions.value = [...releaseVersions, ...snapshotVersions];
+    if (
+      minecraftVersionOptions.value.length > 0 &&
+      !minecraftVersionOptions.value.includes(minecraftVersion.value)
+    ) {
+      minecraftVersion.value = minecraftVersionOptions.value[0];
+    }
+  } catch {
+    minecraftVersionLoadFailed.value = true;
+    minecraftVersionOptions.value = [];
+  } finally {
+    minecraftVersionLoading.value = false;
+  }
+}
+
+async function fetchLoaderVersions(): Promise<void> {
+  loaderVersionOptions.value = [];
+  loaderVersionLoadFailed.value = false;
+  if (!showMinecraftServerVersion.value) {
+    loaderVersionLoading.value = false;
+    loaderVersionCustom.value = false;
+    return;
+  }
+
+  loaderVersionLoading.value = true;
+  try {
+    const versions = await listMinecraftLoaderVersions(
+      minecraftVersion.value,
+      minecraftServerType.value,
+    );
+    loaderVersionOptions.value = versions
+      .map((item) => item.version)
+      .filter((value) => value.trim().length > 0);
+    if (loaderVersionOptions.value.length > 0) {
+      if (!loaderVersionOptions.value.includes(minecraftServerVersion.value)) {
+        minecraftServerVersion.value = loaderVersionOptions.value[0];
+      }
+      loaderVersionCustom.value = false;
+    } else {
+      loaderVersionCustom.value = true;
+    }
+  } catch {
+    loaderVersionLoadFailed.value = true;
+    loaderVersionCustom.value = true;
+  } finally {
+    loaderVersionLoading.value = false;
+  }
+}
+
+function onMinecraftJavaTagChange(event: Event): void {
+  const target = event.target as HTMLSelectElement;
+  minecraftJavaTouched.value = true;
+  minecraftJavaTag.value = target.value;
+}
+
+function useCustomLoaderVersion(): void {
+  loaderVersionCustom.value = true;
+}
+
+function useListedLoaderVersion(): void {
+  loaderVersionCustom.value = false;
+  if (loaderVersionOptions.value.length > 0) {
+    minecraftServerVersion.value = loaderVersionOptions.value[0];
+  }
+}
+
+function onContainerNameInput(): void {
+  containerNameTouched.value = true;
+}
+
 function isBooleanParamEnabled(key: string): boolean {
   return paramValues.value[key] === "true";
 }
@@ -219,6 +465,21 @@ function onBooleanParamChange(key: string, event: Event): void {
 }
 
 function getCreateParamsPayload(): Record<string, string> {
+  if (isMinecraftJava.value) {
+    const payload: Record<string, string> = {
+      MC_VERSION: minecraftVersion.value.trim(),
+      JAVA_TAG: minecraftJavaTag.value,
+      JAVA_TAG_SOURCE: minecraftJavaTouched.value ? "manual" : "auto",
+    };
+    if (minecraftServerType.value) {
+      payload.SERVER_TYPE = minecraftServerType.value;
+    }
+    if (showMinecraftServerVersion.value && minecraftServerVersion.value.trim()) {
+      payload.SERVER_VERSION = minecraftServerVersion.value.trim();
+    }
+    return payload;
+  }
+
   const template = currentTemplate.value;
   if (!template) {
     return {};
@@ -297,6 +558,16 @@ async function handleCreate(): Promise<void> {
   creating.value = true;
   containerStore.print(t("status.creating"));
 
+  if (
+    isMinecraftJava.value &&
+    showMinecraftServerVersion.value &&
+    !minecraftServerVersion.value.trim()
+  ) {
+    pageErrorKey.value = "createPage.serverVersionRequired";
+    creating.value = false;
+    return;
+  }
+
   const resourcesPayload = getCreateResourcesPayload();
   if (!validateResources(resourcesPayload)) {
     creating.value = false;
@@ -318,6 +589,20 @@ async function handleCreate(): Promise<void> {
 
   void router.push({ name: "ContainerList" });
 }
+
+watch([minecraftVersion, minecraftServerType], () => {
+  syncMinecraftJavaTag();
+  if (!showMinecraftServerVersion.value) {
+    minecraftServerVersion.value = "";
+  }
+  if (isMinecraftJava.value) {
+    void fetchLoaderVersions();
+  }
+});
+
+watch([minecraftVersion, minecraftServerType, minecraftServerVersion], () => {
+  syncMinecraftName();
+});
 </script>
 
 <template>
@@ -340,13 +625,14 @@ async function handleCreate(): Promise<void> {
         <p class="game-description">{{ currentGame.description }}</p>
       </header>
 
-      <div class="field-block">
+      <div v-if="!isMinecraftJava" class="field-block">
         <label class="field-label" for="instance-name">{{ $t("createPage.nameLabel") }}</label>
         <input
           id="instance-name"
           v-model="containerName"
           class="text-input"
           :placeholder="$t('createPage.namePlaceholder')"
+          @input="onContainerNameInput"
           @keyup.enter="handleCreate"
         />
       </div>
@@ -356,6 +642,138 @@ async function handleCreate(): Promise<void> {
       </div>
 
       <div v-else-if="currentTemplate" class="field-block">
+        <template v-if="isMinecraftJava">
+          <h3 class="section-title">{{ $t("createPage.minecraftTitle") }}</h3>
+
+          <div class="param-list">
+            <article class="param-item">
+              <label class="field-label" for="minecraft-version">{{
+                $t("createPage.minecraftVersionLabel")
+              }}</label>
+              <select id="minecraft-version" v-model="minecraftVersion" class="text-input">
+                <option
+                  v-for="version in selectableMinecraftVersions"
+                  :key="version"
+                  :value="version"
+                >
+                  {{ version }}
+                </option>
+              </select>
+              <p v-if="minecraftVersionLoading" class="field-hint">
+                {{ $t("createPage.loadingVersions") }}
+              </p>
+              <p v-else-if="minecraftVersionLoadFailed" class="field-hint">
+                {{ $t("createPage.versionLoadFailed") }}
+              </p>
+            </article>
+
+            <article class="param-item">
+              <label class="field-label" for="minecraft-server-type">{{
+                $t("createPage.serverTypeLabel")
+              }}</label>
+              <select id="minecraft-server-type" v-model="minecraftServerType" class="text-input">
+                <option
+                  v-for="serverType in minecraftServerTypes"
+                  :key="serverType.value || 'VANILLA'"
+                  :value="serverType.value"
+                >
+                  {{
+                    serverType.value
+                      ? serverType.label
+                      : $t("createPage.noLoaderOption", { type: serverType.label })
+                  }}
+                </option>
+              </select>
+            </article>
+
+            <article v-if="showMinecraftServerVersion" class="param-item">
+              <label class="field-label" for="minecraft-server-version">{{
+                $t("createPage.serverVersionLabel")
+              }}</label>
+              <select
+                v-if="loaderVersionOptions.length > 0 && !loaderVersionCustom"
+                id="minecraft-server-version"
+                v-model="minecraftServerVersion"
+                class="text-input"
+              >
+                <option v-for="version in loaderVersionOptions" :key="version" :value="version">
+                  {{ version }}
+                </option>
+              </select>
+              <input
+                v-else
+                id="minecraft-server-version"
+                v-model="minecraftServerVersion"
+                class="text-input"
+                type="text"
+                :placeholder="$t('createPage.serverVersionPlaceholder')"
+              />
+              <div class="inline-actions">
+                <button
+                  v-if="loaderVersionOptions.length > 0 && !loaderVersionCustom"
+                  class="inline-btn"
+                  type="button"
+                  @click="useCustomLoaderVersion"
+                >
+                  {{ $t("createPage.customVersion") }}
+                </button>
+                <button
+                  v-else-if="loaderVersionOptions.length > 0"
+                  class="inline-btn"
+                  type="button"
+                  @click="useListedLoaderVersion"
+                >
+                  {{ $t("createPage.useVersionList") }}
+                </button>
+              </div>
+              <p v-if="loaderVersionLoading" class="field-hint">
+                {{ $t("createPage.loadingLoaderVersions") }}
+              </p>
+              <p v-else-if="loaderVersionLoadFailed" class="field-hint">
+                {{ $t("createPage.loaderVersionLoadFailed") }}
+              </p>
+            </article>
+
+            <article class="param-item">
+              <label class="field-label" for="minecraft-java-tag">{{
+                $t("createPage.javaVersionLabel")
+              }}</label>
+              <select
+                id="minecraft-java-tag"
+                class="text-input"
+                :value="minecraftJavaTag"
+                @change="onMinecraftJavaTagChange"
+              >
+                <option v-for="tag in minecraftJavaTags" :key="tag.value" :value="tag.value">
+                  {{ tag.label }}
+                </option>
+              </select>
+              <p class="field-hint">
+                {{
+                  $t("createPage.javaRecommendation", {
+                    java: recommendedMinecraftJavaTag.replace("java", "Java "),
+                  })
+                }}
+              </p>
+            </article>
+
+            <article class="param-item">
+              <label class="field-label" for="instance-name">{{
+                $t("createPage.nameLabel")
+              }}</label>
+              <input
+                id="instance-name"
+                v-model="containerName"
+                class="text-input"
+                :placeholder="$t('createPage.namePlaceholder')"
+                @input="onContainerNameInput"
+                @keyup.enter="handleCreate"
+              />
+              <p class="field-hint">{{ $t("createPage.generatedNameHint") }}</p>
+            </article>
+          </div>
+        </template>
+
         <h3 class="section-title">{{ $t("createPage.portsTitle") }}</h3>
 
         <div v-if="ports.length > 0" class="param-list">
@@ -422,13 +840,16 @@ async function handleCreate(): Promise<void> {
           {{ $t("createPage.resourcesUnavailable") }}
         </div>
 
-        <h3 class="section-title">{{ $t("createPage.paramsTitle") }}</h3>
+        <h3 v-if="!isMinecraftJava" class="section-title">{{ $t("createPage.paramsTitle") }}</h3>
 
-        <div v-if="currentTemplate.params.length === 0" class="state-message compact">
+        <div
+          v-if="!isMinecraftJava && currentTemplate.params.length === 0"
+          class="state-message compact"
+        >
           {{ $t("createPage.noParams") }}
         </div>
 
-        <div v-else class="param-list">
+        <div v-else-if="!isMinecraftJava" class="param-list">
           <article v-for="param in currentTemplate.params" :key="param.key" class="param-item">
             <label class="field-label" :for="`param-${param.key}`">{{ param.label }}</label>
             <p v-if="param.description" class="field-hint">{{ param.description }}</p>
@@ -679,6 +1100,23 @@ async function handleCreate(): Promise<void> {
   gap: 8px;
   font-size: 13px;
   color: var(--card-text);
+}
+
+.inline-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.inline-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  background: var(--card-bg);
+  border: 2px solid var(--card-border);
+  color: var(--card-text);
+  border-radius: 0;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 0 var(--create-border-outer);
+  font-weight: bold;
 }
 
 .actions {
