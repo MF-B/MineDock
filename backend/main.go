@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 
@@ -14,9 +15,16 @@ import (
 )
 
 func main() {
+	logSink, err := service.NewSystemLogSink(os.Getenv("MINEDOCK_LOG_PATH"))
+	if err != nil {
+		log.Fatalf("init system logger: %v", err)
+	}
+	defer logSink.Close()
+	slog.Info("system logger initialized", "path", logSink.Path())
+
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		log.Fatalf("init docker client: %v", err)
+		fatal("init docker client", err)
 	}
 	defer cli.Close()
 
@@ -27,7 +35,7 @@ func main() {
 
 	sqliteStore, err := store.NewSQLiteStore(dbPath)
 	if err != nil {
-		log.Fatalf("init sqlite store: %v", err)
+		fatal("init sqlite store", err)
 	}
 	defer sqliteStore.Close()
 
@@ -46,12 +54,12 @@ func main() {
 		dataDir = "data/instances"
 	}
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
-		log.Fatalf("init data dir: %v", err)
+		fatal("init data dir", err)
 	}
 
 	gameSvc, err := service.NewGameService(gamesPath, templatesDir)
 	if err != nil {
-		log.Fatalf("init game service: %v", err)
+		fatal("init game service", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -71,6 +79,7 @@ func main() {
 	filesHandler := api.NewFilesHandler(fileSvc)
 	monitorHandler := api.NewMonitorHandler(service.NewMonitorService())
 	minecraftVersionHandler := api.NewMinecraftVersionHandler(service.NewMinecraftVersionService())
+	systemLogHandler := api.NewSystemLogHandler(service.NewSystemLogService(logSink.Path()))
 	router := api.NewRouter(
 		h,
 		gameHandler,
@@ -80,11 +89,17 @@ func main() {
 		filesHandler,
 		monitorHandler,
 		minecraftVersionHandler,
+		systemLogHandler,
 	)
 
 	addr := ":8080"
-	log.Printf("MineDock backend listening on %s", addr)
+	slog.Info("backend listening", "addr", addr)
 	if err := http.ListenAndServe(addr, router); err != nil {
-		log.Fatalf("start server: %v", err)
+		fatal("start server", err)
 	}
+}
+
+func fatal(message string, err error) {
+	slog.Error(message, "error", err)
+	os.Exit(1)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -185,6 +186,7 @@ func (s *DockerService) CreateInstance(
 		},
 	}, hostConfig, nil, nil, "")
 	if err != nil {
+		slog.Error("create instance container failed", "name", name, "game_id", game.ID, "error", err)
 		return "", fmt.Errorf("create container: %w", err)
 	}
 
@@ -192,9 +194,11 @@ func (s *DockerService) CreateInstance(
 	if err := s.store.Save(ctx, inst); err != nil {
 		// 说明：请求上下文取消时，清理逻辑会使用独立上下文做尽力回收。
 		_ = s.cli.ContainerRemove(context.Background(), resp.ID, container.RemoveOptions{Force: true})
+		slog.Error("save instance record failed", "container_id", resp.ID, "name", name, "game_id", game.ID, "error", err)
 		return "", fmt.Errorf("save instance record: %w", err)
 	}
 
+	slog.Info("instance created", "container_id", resp.ID, "name", name, "game_id", game.ID)
 	return resp.ID, nil
 }
 
@@ -369,6 +373,7 @@ func (s *DockerService) UpdateInstanceConfig(
 	labels[configPathLabelKey] = configPath
 
 	if err := s.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: false}); err != nil {
+		slog.Error("remove old container failed", "container_id", containerID, "error", err)
 		return "", fmt.Errorf("remove old container: %w", err)
 	}
 
@@ -386,6 +391,7 @@ func (s *DockerService) UpdateInstanceConfig(
 		Labels:       labels,
 	}, hostConfig, nil, nil, containerName)
 	if err != nil {
+		slog.Error("create replacement container failed", "old_container_id", containerID, "name", instanceName, "game_id", gameID, "error", err)
 		return "", fmt.Errorf("create replacement container: %w", err)
 	}
 
@@ -398,18 +404,22 @@ func (s *DockerService) UpdateInstanceConfig(
 	}
 
 	if err := s.store.Delete(ctx, containerID); err != nil {
+		slog.Error("delete old instance record failed", "container_id", containerID, "error", err)
 		return "", fmt.Errorf("delete old instance record: %w", err)
 	}
 	if err := s.store.Save(ctx, newInst); err != nil {
+		slog.Error("save new instance record failed", "container_id", resp.ID, "name", instanceName, "game_id", gameID, "error", err)
 		return "", fmt.Errorf("save new instance record: %w", err)
 	}
 
+	slog.Info("instance config updated", "old_container_id", containerID, "new_container_id", resp.ID, "name", instanceName, "game_id", gameID)
 	return resp.ID, nil
 }
 
 // StartInstance 启动托管容器并更新持久化记录。
 func (s *DockerService) StartInstance(ctx context.Context, containerID string) error {
 	if err := s.cli.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
+		slog.Error("start instance failed", "container_id", containerID, "error", err)
 		return fmt.Errorf("start container: %w", err)
 	}
 
@@ -418,9 +428,11 @@ func (s *DockerService) StartInstance(ctx context.Context, containerID string) e
 		return err
 	}
 	if err := s.store.Save(ctx, inst); err != nil {
+		slog.Error("save started instance state failed", "container_id", containerID, "error", err)
 		return fmt.Errorf("save instance state: %w", err)
 	}
 
+	slog.Info("instance started", "container_id", containerID, "name", inst.Name, "game_id", inst.GameID)
 	return nil
 }
 
@@ -428,6 +440,7 @@ func (s *DockerService) StartInstance(ctx context.Context, containerID string) e
 func (s *DockerService) StopInstance(ctx context.Context, containerID string) error {
 	timeout := 10
 	if err := s.cli.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout}); err != nil {
+		slog.Error("stop instance failed", "container_id", containerID, "error", err)
 		return fmt.Errorf("stop container: %w", err)
 	}
 
@@ -436,9 +449,11 @@ func (s *DockerService) StopInstance(ctx context.Context, containerID string) er
 		return err
 	}
 	if err := s.store.Save(ctx, inst); err != nil {
+		slog.Error("save stopped instance state failed", "container_id", containerID, "error", err)
 		return fmt.Errorf("save instance state: %w", err)
 	}
 
+	slog.Info("instance stopped", "container_id", containerID, "name", inst.Name, "game_id", inst.GameID)
 	return nil
 }
 
@@ -496,12 +511,14 @@ func (s *DockerService) DeleteInstance(ctx context.Context, containerID string, 
 	}
 
 	if inspect.State != nil && inspect.State.Running {
+		slog.Warn("delete running instance rejected", "container_id", containerID)
 		return model.ErrInstanceRunning
 	}
 
 	instanceName := instanceNameFromInspect(inspect, containerID)
 
 	if err := s.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: false}); err != nil {
+		slog.Error("remove instance container failed", "container_id", containerID, "name", instanceName, "error", err)
 		return fmt.Errorf("remove container: %w", err)
 	}
 	var purgeErr error
@@ -509,11 +526,14 @@ func (s *DockerService) DeleteInstance(ctx context.Context, containerID string, 
 		purgeErr = s.removeInstanceData(instanceName)
 	}
 	if err := s.store.Delete(ctx, containerID); err != nil {
+		slog.Error("delete instance record failed", "container_id", containerID, "name", instanceName, "error", err)
 		return fmt.Errorf("delete instance record: %w", err)
 	}
 	if purgeErr != nil {
+		slog.Error("purge instance data failed", "container_id", containerID, "name", instanceName, "error", purgeErr)
 		return purgeErr
 	}
+	slog.Info("instance deleted", "container_id", containerID, "name", instanceName, "purge_data", purgeData)
 	return nil
 }
 

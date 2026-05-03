@@ -242,6 +242,19 @@ export interface ServerMetrics {
   network: ServerNetworkMetrics;
 }
 
+export interface SystemLogEntry {
+  time: string;
+  level: string;
+  message: string;
+  attributes?: Record<string, unknown>;
+  raw?: string;
+}
+
+export interface SystemLogsResponse {
+  path: string;
+  entries: SystemLogEntry[];
+}
+
 export interface HealthCheckConfig {
   test: string[];
   interval: string;
@@ -426,4 +439,15 @@ export function updateInstanceConfig(
 
 export function getServerMetrics(): Promise<ServerMetrics> {
   return request<ServerMetrics>("/monitor/server", { method: "GET" });
+}
+
+export function getSystemLogs(tail: number, level = "", query = ""): Promise<SystemLogsResponse> {
+  const params = new URLSearchParams({ tail: String(tail) });
+  if (level) {
+    params.set("level", level);
+  }
+  if (query) {
+    params.set("q", query);
+  }
+  return request<SystemLogsResponse>(`/system/logs?${params.toString()}`, { method: "GET" });
 }

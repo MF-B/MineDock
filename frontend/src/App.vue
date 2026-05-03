@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Sidebar from "./components/Sidebar.vue";
 import TopBar from "./components/TopBar.vue";
+import ToastHost from "./components/ToastHost.vue";
 </script>
 
 <template>
@@ -9,6 +10,7 @@ import TopBar from "./components/TopBar.vue";
     <TopBar />
     <router-view />
   </div>
+  <ToastHost />
 </template>
 
 <style scoped>

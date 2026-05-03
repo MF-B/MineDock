@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useContainerStore } from "../stores/containers";
@@ -12,13 +12,6 @@ const instanceSync = useInstanceSync();
 const pendingDeleteId = ref<string | null>(null);
 const purgeDeleteData = ref(false);
 
-const outputText = computed(() => {
-  if (store.outputI18n) {
-    return t(store.outputI18n.key, store.outputI18n.values ?? {});
-  }
-  return store.output;
-});
-
 onMounted(() => {
   instanceSync.start();
   void initializeList();
@@ -29,17 +22,7 @@ onUnmounted(() => {
 });
 
 async function initializeList(): Promise<void> {
-  store.print(t("status.waiting"));
-  const success = await store.fetchInstances();
-  if (!success) {
-    return;
-  }
-
-  if (store.instances.length > 0) {
-    store.print(t("status.listRefreshed"));
-  } else {
-    store.print(t("status.noContainers"));
-  }
+  await store.fetchInstances();
 }
 
 function goToTemplateMarket(): void {
@@ -155,9 +138,6 @@ async function handleToggle(instance: {
         </div>
       </section>
     </div>
-
-    <!-- 用于显示接口返回的简易日志 -->
-    <pre class="output">{{ outputText }}</pre>
   </main>
 </template>
 
@@ -427,22 +407,6 @@ input:checked + .slider:before {
 }
 .slider.round:before {
   border-radius: 0;
-}
-
-/* ========== 底部输出 ========== */
-.output {
-  margin-top: auto;
-  padding: 12px;
-  background: var(--output-bg);
-  color: var(--output-text);
-  border: 3px solid var(--card-border);
-  border-radius: 0;
-  min-height: 80px;
-  max-height: 160px;
-  overflow-y: auto;
-  word-wrap: break-word;
-  white-space: pre-wrap;
-  font-size: 13px;
 }
 
 /* ========== 响应式自适应 ========== */

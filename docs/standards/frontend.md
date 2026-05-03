@@ -70,6 +70,8 @@
 - 当前路由：
   - `/` 映射容器列表页（`ContainerList.vue`）
   - `/registry` 映射游戏模板市场页（`ImageRegistry.vue`）
+  - `/monitor` 映射服务器监控页（`ServerMonitor.vue`）
+  - `/logs` 映射系统日志页（`SystemLogs.vue`）
   - `/instances/:id` 映射容器详情页（`InstanceDetail.vue`）
 - 当前版本无登录鉴权。
 - 新增页面时要求：
@@ -81,5 +83,5 @@
 
 - API 异常统一在 store 层收敛并转换为可读错误信息。
 - 视图层对关键破坏性操作进行二次确认（如删除实例）。
-- 统一将成功/失败反馈写入 `output` 区域，避免静默失败。
+- 统一通过全局 toast 展示成功/失败反馈，避免静默失败。
 - 国际化文案通过 `vue-i18n` 管理，错误提示使用 i18n key 输出。

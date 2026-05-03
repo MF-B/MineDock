@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import { defineStore } from "pinia";
 import type { Instance } from "../api/index";
+import { useToastStore } from "./toasts";
 import {
   ApiRequestError,
   listInstances,
@@ -62,6 +63,7 @@ function isLikelyI18nKey(value: string): boolean {
 }
 
 export const useContainerStore = defineStore("containers", () => {
+  const toasts = useToastStore();
   const instances = ref<Instance[]>([]);
   const wsConnected = ref(false);
   // 统一输出区支持纯文本和 i18n key 两种模式，视图层只负责渲染。
@@ -71,11 +73,19 @@ export const useContainerStore = defineStore("containers", () => {
   function print(data: unknown): void {
     outputI18n.value = null;
     output.value = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+    if (typeof data === "string" && data.trim().length > 0) {
+      toasts.pushText("info", data);
+    }
   }
 
-  function printI18n(key: string, values?: Record<string, string | number>): void {
+  function printI18n(
+    key: string,
+    values?: Record<string, string | number>,
+    kind: "info" | "success" | "warning" | "error" = "info",
+  ): void {
     outputI18n.value = { key, values };
     output.value = "";
+    toasts.pushI18n(kind, key, values);
   }
 
   function mapStatusToError(status?: number): OutputI18nPayload {
@@ -136,11 +146,11 @@ export const useContainerStore = defineStore("containers", () => {
 
   function printError(error: unknown): void {
     const mapped = mapErrorToI18n(error);
-    printI18n(mapped.key, mapped.values);
+    printI18n(mapped.key, mapped.values, "error");
   }
 
   function printErrorKey(key: string, values?: Record<string, string | number>): void {
-    printI18n(key, values);
+    printI18n(key, values, "error");
   }
 
   // 保持列表顺序稳定：优先沿用当前显示顺序，新增项再按名称/ID 排序追加。
@@ -196,8 +206,8 @@ export const useContainerStore = defineStore("containers", () => {
     resources?: ResourceLimits,
   ): Promise<boolean> {
     try {
-      const data = await apiCreate(name, gameId, params, ports, resources);
-      print(data);
+      await apiCreate(name, gameId, params, ports, resources);
+      printI18n("status.createSuccess", { name }, "success");
       await fetchInstances();
       return true;
     } catch (err) {
@@ -209,8 +219,8 @@ export const useContainerStore = defineStore("containers", () => {
   // 删除结果与刷新都在 store 内完成，破坏性确认由视图层负责。
   async function remove(containerId: string, purgeData = false): Promise<void> {
     try {
-      const data = await apiDelete(containerId, purgeData);
-      print(data);
+      await apiDelete(containerId, purgeData);
+      printI18n("status.deleteSuccess", undefined, "success");
       await fetchInstances();
     } catch (err) {
       printError(err);

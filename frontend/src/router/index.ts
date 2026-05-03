@@ -20,6 +20,11 @@ const router = createRouter({
       component: () => import("../views/ServerMonitor.vue"),
     },
     {
+      path: "/logs",
+      name: "SystemLogs",
+      component: () => import("../views/SystemLogs.vue"),
+    },
+    {
       path: "/registry/:gameId/create",
       name: "CreateInstance",
       component: () => import("../views/CreateInstance.vue"),

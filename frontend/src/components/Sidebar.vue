@@ -46,6 +46,14 @@ const isOpen = ref<boolean>(false);
           </div>
           <div class="menu-text">{{ $t("sidebar.serverMonitor") }}</div>
         </RouterLink>
+        <RouterLink to="/logs" class="menu-item">
+          <div class="menu-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M5 3h14v18H5V3zm3 4v2h8V7H8zm0 4v2h8v-2H8zm0 4v2h5v-2H8z" />
+            </svg>
+          </div>
+          <div class="menu-text">{{ $t("sidebar.systemLogs") }}</div>
+        </RouterLink>
       </div>
     </aside>
   </Transition>
@@ -85,6 +93,14 @@ const isOpen = ref<boolean>(false);
           </svg>
         </div>
         <div class="menu-text">{{ $t("sidebar.serverMonitor") }}</div>
+      </RouterLink>
+      <RouterLink to="/logs" class="menu-item">
+        <div class="menu-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M5 3h14v18H5V3zm3 4v2h8V7H8zm0 4v2h8v-2H8zm0 4v2h5v-2H8z" />
+          </svg>
+        </div>
+        <div class="menu-text">{{ $t("sidebar.systemLogs") }}</div>
       </RouterLink>
     </div>
   </aside>
