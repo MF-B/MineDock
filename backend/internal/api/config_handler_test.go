@@ -56,7 +56,7 @@ func newConfigTestRouter(cfg *mockConfigurator) http.Handler {
 		deleteFn: func(_ context.Context, _ string, _ bool) error { return nil },
 	})
 
-	return NewRouter(h, nil, nil, nil, NewConfigHandler(cfg), nil, nil, nil)
+	return NewRouter(h, nil, nil, nil, NewConfigHandler(cfg), nil, nil, nil, nil)
 }
 
 func TestGetConfig_Success(t *testing.T) {

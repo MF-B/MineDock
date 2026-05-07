@@ -35,7 +35,7 @@ func newMonitorTestRouter(monitor ServerMonitor) http.Handler {
 		stopFn:   func(_ context.Context, _ string) error { return nil },
 		deleteFn: func(_ context.Context, _ string, _ bool) error { return nil },
 	})
-	return NewRouter(h, nil, nil, nil, nil, nil, NewMonitorHandler(monitor), nil)
+	return NewRouter(h, nil, nil, nil, nil, nil, NewMonitorHandler(monitor), nil, nil)
 }
 
 func TestMonitorServer_Success(t *testing.T) {

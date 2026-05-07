@@ -375,6 +375,30 @@
 - `path` 使用 POSIX 语义，禁止 `..` 与反斜杠。
 - 服务端会校验最终文件系统路径位于对应 bind mount 根目录内，并拒绝符号链接逃逸。
 
+### GET /api/instances/:id/stats
+
+- 说明：获取单个容器的资源使用快照（CPU、内存、网络 I/O、磁盘 I/O）
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（ID非法）、`500`（容器未运行/采集失败）
+- 请求参数：
+  - 路径参数：`id`（容器 ID）
+- 返回结果：
+
+```json
+{
+  "timestamp": 1777449600000,
+  "cpu_percent": 12.5,
+  "memory_used_bytes": 536870912,
+  "memory_max_bytes": 2147483648,
+  "memory_percent": 25.0,
+  "network_rx_bytes": 1048576,
+  "network_tx_bytes": 524288,
+  "disk_read_bytes": 204800,
+  "disk_write_bytes": 102400
+}
+```
+
 ### GET /api/monitor/server
 
 - 说明：返回服务器监控页面所需的一次主机级资源指标快照。

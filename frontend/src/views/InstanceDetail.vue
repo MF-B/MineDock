@@ -6,8 +6,9 @@ import { useConsole } from "../composables/useConsole";
 import { useContainerStore } from "../stores/containers";
 import InstanceConfig from "./InstanceConfig.vue";
 import InstanceFiles from "./InstanceFiles.vue";
+import InstanceMonitor from "./InstanceMonitor.vue";
 
-type DetailTab = "console" | "config" | "files";
+type DetailTab = "console" | "config" | "files" | "monitor";
 
 const route = useRoute();
 const router = useRouter();
@@ -179,6 +180,16 @@ onUnmounted(() => {
       >
         {{ $t("tabs.files") }}
       </button>
+      <button
+        class="tab-btn"
+        :class="{ 'is-active': activeTab === 'monitor' }"
+        role="tab"
+        type="button"
+        :aria-selected="activeTab === 'monitor'"
+        @click="switchTab('monitor')"
+      >
+        {{ $t("tabs.monitor") }}
+      </button>
     </nav>
 
     <section class="tab-content">
@@ -195,7 +206,9 @@ onUnmounted(() => {
         @reconfigured="handleReconfigured"
       />
 
-      <InstanceFiles v-else :container-id="containerId" />
+      <InstanceFiles v-else-if="activeTab === 'files'" :container-id="containerId" />
+
+      <InstanceMonitor v-else-if="activeTab === 'monitor'" :container-id="containerId" />
     </section>
 
     <footer v-if="activeTab === 'console' && displayError" class="status-bar">

@@ -78,6 +78,7 @@ func main() {
 	fileSvc := service.NewFileService(sqliteStore, gameSvc, dataDir)
 	filesHandler := api.NewFilesHandler(fileSvc)
 	monitorHandler := api.NewMonitorHandler(service.NewMonitorService())
+	containerStatsHandler := api.NewContainerStatsHandler(service.NewContainerStatsService(cli))
 	minecraftVersionHandler := api.NewMinecraftVersionHandler(service.NewMinecraftVersionService())
 	systemLogHandler := api.NewSystemLogHandler(service.NewSystemLogService(logSink.Path()))
 	router := api.NewRouter(
@@ -88,6 +89,7 @@ func main() {
 		configHandler,
 		filesHandler,
 		monitorHandler,
+		containerStatsHandler,
 		minecraftVersionHandler,
 		systemLogHandler,
 	)

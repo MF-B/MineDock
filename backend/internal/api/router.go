@@ -16,6 +16,7 @@ func NewRouter(
 	config *ConfigHandler,
 	files *FilesHandler,
 	monitor *MonitorHandler,
+	containerStats *ContainerStatsHandler,
 	minecraftVersions *MinecraftVersionHandler,
 	systemLogs ...*SystemLogHandler,
 ) http.Handler {
@@ -44,6 +45,9 @@ func NewRouter(
 	}
 	if monitor != nil {
 		mux.HandleFunc("GET /api/monitor/server", monitor.HandleGetServerMetrics)
+	}
+	if containerStats != nil {
+		mux.HandleFunc("GET /api/instances/{id}/stats", containerStats.HandleGetStats)
 	}
 	if systemLogHandler != nil {
 		mux.HandleFunc("GET /api/system/logs", systemLogHandler.HandleList)

@@ -264,6 +264,10 @@ func (f *fakeDockerClient) ImagePull(_ context.Context, _ string, _ image.PullOp
 	return io.NopCloser(strings.NewReader("")), nil
 }
 
+func (f *fakeDockerClient) ContainerStats(_ context.Context, _ string, _ bool) (container.StatsResponseReader, error) {
+	return container.StatsResponseReader{Body: io.NopCloser(strings.NewReader("{}"))}, nil
+}
+
 type fakeInstanceStore struct {
 	instances map[string]model.Instance
 

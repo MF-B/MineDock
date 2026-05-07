@@ -25,7 +25,8 @@
   "tabs": {
     "console": "控制台",
     "config": "配置",
-    "files": "文件"
+    "files": "文件",
+    "monitor": "监控"
   },
   "config": {
     "title": "服务器配置",
@@ -221,6 +222,25 @@
     "lastMinute": "最近 60 秒",
     "capacityGb": "{total} GB 容量",
     "networkLegend": "接收与发送流量"
+  },
+  "instanceMonitor": {
+    "loading": "正在加载容器资源指标...",
+    "loadError": "容器资源指标加载失败。",
+    "notRunning": "容器未运行，无法采集资源数据。",
+    "cpu": "CPU",
+    "cpuUsage": "CPU 使用率",
+    "memory": "内存",
+    "memoryUsage": "内存使用率",
+    "network": "网络",
+    "disk": "磁盘",
+    "inputUnit": "接收 MB/s",
+    "outputUnit": "发送 MB/s",
+    "readUnit": "读取 MB/s",
+    "writeUnit": "写入 MB/s",
+    "rx": "接收",
+    "tx": "发送",
+    "read": "读取",
+    "write": "写入"
   },
   "registry": {
     "title": "游戏模板市场",

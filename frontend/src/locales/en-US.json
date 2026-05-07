@@ -25,7 +25,8 @@
   "tabs": {
     "console": "Console",
     "config": "Config",
-    "files": "Files"
+    "files": "Files",
+    "monitor": "Monitor"
   },
   "config": {
     "title": "Server Config",
@@ -221,6 +222,25 @@
     "lastMinute": "Last 60 seconds",
     "capacityGb": "{total} GB capacity",
     "networkLegend": "Receive and transmit traffic"
+  },
+  "instanceMonitor": {
+    "loading": "Loading container resource metrics...",
+    "loadError": "Failed to load container metrics.",
+    "notRunning": "Container is not running. No resource data available.",
+    "cpu": "CPU",
+    "cpuUsage": "CPU Usage",
+    "memory": "Memory",
+    "memoryUsage": "Memory Usage",
+    "network": "Network",
+    "disk": "Disk",
+    "inputUnit": "Rx MB/s",
+    "outputUnit": "Tx MB/s",
+    "readUnit": "Read MB/s",
+    "writeUnit": "Write MB/s",
+    "rx": "Rx",
+    "tx": "Tx",
+    "read": "Read",
+    "write": "Write"
   },
   "registry": {
     "title": "Game Template Marketplace",

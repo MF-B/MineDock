@@ -441,6 +441,24 @@ export function getServerMetrics(): Promise<ServerMetrics> {
   return request<ServerMetrics>("/monitor/server", { method: "GET" });
 }
 
+export interface ContainerStats {
+  timestamp: number;
+  cpu_percent: number;
+  memory_used_bytes: number;
+  memory_max_bytes: number;
+  memory_percent: number;
+  network_rx_bytes: number;
+  network_tx_bytes: number;
+  disk_read_bytes: number;
+  disk_write_bytes: number;
+}
+
+export function getContainerStats(containerId: string): Promise<ContainerStats> {
+  return request<ContainerStats>(`/instances/${encodeURIComponent(containerId)}/stats`, {
+    method: "GET",
+  });
+}
+
 export function getSystemLogs(tail: number, level = "", query = ""): Promise<SystemLogsResponse> {
   const params = new URLSearchParams({ tail: String(tail) });
   if (level) {
