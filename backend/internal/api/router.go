@@ -1,8 +1,10 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // NewRouter 注册 API 路由并包装中间件。
@@ -15,8 +17,13 @@ func NewRouter(
 	files *FilesHandler,
 	monitor *MonitorHandler,
 	minecraftVersions *MinecraftVersionHandler,
+	systemLogs ...*SystemLogHandler,
 ) http.Handler {
 	mux := http.NewServeMux()
+	var systemLogHandler *SystemLogHandler
+	if len(systemLogs) > 0 {
+		systemLogHandler = systemLogs[0]
+	}
 
 	mux.HandleFunc("GET /api/instances", h.GetInstances)
 	mux.HandleFunc("POST /api/instances", h.CreateInstance)
@@ -38,6 +45,9 @@ func NewRouter(
 	if monitor != nil {
 		mux.HandleFunc("GET /api/monitor/server", monitor.HandleGetServerMetrics)
 	}
+	if systemLogHandler != nil {
+		mux.HandleFunc("GET /api/system/logs", systemLogHandler.HandleList)
+	}
 	if ws != nil {
 		mux.HandleFunc("GET /api/ws/events", ws.HandleEvents)
 	}
@@ -53,7 +63,7 @@ func NewRouter(
 		mux.HandleFunc("GET /api/games/minecraft-java/loader-versions", minecraftVersions.HandleMinecraftLoaderVersions)
 	}
 
-	return withCORS(mux)
+	return withRequestLogging(withCORS(mux))
 }
 
 // withCORS 添加宽松的 CORS 响应头并处理 OPTIONS 预检请求。
@@ -75,4 +85,46 @@ func withCORS(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func withRequestLogging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/ws/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		start := time.Now()
+		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorder, r)
+
+		attrs := []any{
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", recorder.status,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"remote_addr", r.RemoteAddr,
+		}
+		switch {
+		case recorder.status >= http.StatusInternalServerError:
+			slog.Error("http request", attrs...)
+		case recorder.status >= http.StatusBadRequest:
+			slog.Warn("http request", attrs...)
+		default:
+			if r.Method == http.MethodGet || r.Method == http.MethodOptions {
+				return
+			}
+			slog.Info("http request", attrs...)
+		}
+	})
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
 }

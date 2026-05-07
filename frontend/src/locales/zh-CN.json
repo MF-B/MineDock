@@ -140,10 +140,12 @@
     "emptyGame": "请选择一个游戏模板",
     "creating": "正在创建容器...",
     "deleting": "正在删除容器...",
+    "deleteSuccess": "容器已删除。",
     "stopping": "正在关闭容器: {name}...",
     "stopSuccess": "容器 {name} 请求关闭成功",
     "starting": "正在开启容器: {name}...",
-    "startSuccess": "容器 {name} 请求开启成功"
+    "startSuccess": "容器 {name} 请求开启成功",
+    "createSuccess": "容器 {name} 已创建。"
   },
   "errors": {
     "network": "网络请求失败，请检查连接后重试。",
@@ -170,7 +172,27 @@
   "sidebar": {
     "containerList": "容器列表",
     "imageRegistry": "游戏模板",
-    "serverMonitor": "服务器监控"
+    "serverMonitor": "服务器监控",
+    "systemLogs": "系统日志"
+  },
+  "systemLogs": {
+    "title": "系统日志",
+    "loading": "正在加载日志...",
+    "loadError": "系统日志加载失败。",
+    "refresh": "刷新",
+    "autoRefresh": "自动刷新",
+    "level": "级别",
+    "allLevels": "全部级别",
+    "queryPlaceholder": "搜索日志",
+    "tail": "行数",
+    "empty": "当前筛选条件下没有日志。",
+    "path": "日志文件：{path}",
+    "columns": {
+      "time": "时间",
+      "level": "级别",
+      "message": "消息",
+      "attributes": "属性"
+    }
   },
   "monitor": {
     "title": "资源监控",

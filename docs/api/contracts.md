@@ -423,6 +423,33 @@
 }
 ```
 
+### GET /api/system/logs
+
+- 说明：读取 MineDock 后端系统日志，默认返回最近 500 行。
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（tail 非法）、`500`
+- 请求参数：
+  - query：`tail`，可选，返回最近日志行数，默认 `500`，最大 `5000`
+  - query：`level`，可选，按 `debug` / `info` / `warn` / `error` 过滤
+  - query：`q`，可选，按原始日志行文本搜索
+- 返回结果：
+
+```json
+{
+  "path": "data/minedock.log",
+  "entries": [
+    {
+      "time": "2026-05-01T14:00:00+08:00",
+      "level": "INFO",
+      "message": "backend listening",
+      "attributes": { "addr": ":8080" },
+      "raw": "{\"time\":\"2026-05-01T14:00:00+08:00\",\"level\":\"INFO\",\"msg\":\"backend listening\",\"addr\":\":8080\"}"
+    }
+  ]
+}
+```
+
 ### GET /api/ws/events (WebSocket)
 
 - 说明：建立 WebSocket 连接，实时接收容器状态变更推送

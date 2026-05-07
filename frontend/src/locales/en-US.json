@@ -140,10 +140,12 @@
     "emptyGame": "Please select a game template",
     "creating": "Creating container...",
     "deleting": "Deleting container...",
+    "deleteSuccess": "Container deleted.",
     "stopping": "Stopping container: {name}...",
     "stopSuccess": "Container {name} stop request sent",
     "starting": "Starting container: {name}...",
-    "startSuccess": "Container {name} start request sent"
+    "startSuccess": "Container {name} start request sent",
+    "createSuccess": "Container {name} created."
   },
   "errors": {
     "network": "Network request failed. Please check your connection and try again.",
@@ -170,7 +172,27 @@
   "sidebar": {
     "containerList": "Containers",
     "imageRegistry": "Game Templates",
-    "serverMonitor": "Server Monitor"
+    "serverMonitor": "Server Monitor",
+    "systemLogs": "System Logs"
+  },
+  "systemLogs": {
+    "title": "System Logs",
+    "loading": "Loading logs...",
+    "loadError": "Failed to load system logs.",
+    "refresh": "Refresh",
+    "autoRefresh": "Auto refresh",
+    "level": "Level",
+    "allLevels": "All levels",
+    "queryPlaceholder": "Search logs",
+    "tail": "Lines",
+    "empty": "No log entries match the current filters.",
+    "path": "Log file: {path}",
+    "columns": {
+      "time": "Time",
+      "level": "Level",
+      "message": "Message",
+      "attributes": "Attributes"
+    }
   },
   "monitor": {
     "title": "Server Monitor",

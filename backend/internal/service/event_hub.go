@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"sort"
 	"sync"
 	"time"
@@ -81,7 +81,7 @@ func (h *EventHub) Run(ctx context.Context) {
 			backoff = time.Second
 		}
 		if err != nil {
-			log.Printf("event hub run once: %v", err)
+			slog.Warn("event hub run once failed", "error", err)
 		}
 
 		timer := time.NewTimer(backoff)
@@ -122,7 +122,7 @@ func (h *EventHub) runOnce(ctx context.Context) (bool, error) {
 
 	// 每次连接（含重连）成功后立即推送一次全量快照。
 	if err := h.refreshAndBroadcast(ctx); err != nil && ctx.Err() == nil {
-		log.Printf("event hub initial snapshot: %v", err)
+		slog.Warn("event hub initial snapshot failed", "error", err)
 	} else if err == nil {
 		healthy = true
 	}
@@ -160,7 +160,7 @@ func (h *EventHub) runOnce(ctx context.Context) (bool, error) {
 			}
 			pending = false
 			if err := h.refreshAndBroadcast(ctx); err != nil && ctx.Err() == nil {
-				log.Printf("event hub broadcast snapshot: %v", err)
+				slog.Warn("event hub broadcast snapshot failed", "error", err)
 			} else if err == nil {
 				healthy = true
 			}
