@@ -400,3 +400,68 @@ func mapFileError(err error) error {
 	}
 	return err
 }
+
+// MaxEditBytes 是可在线编辑的单文件大小限制（1 MB）。
+const MaxEditBytes int64 = 1 * 1024 * 1024
+
+// ReadContent 读取指定文件的文本内容，拒绝二进制和超大文件。
+func (s *FileService) ReadContent(ctx context.Context, containerID, mountName, apiPath string) (string, int64, error) {
+	mount, err := s.resolveMount(ctx, containerID, mountName)
+	if err != nil {
+		return "", 0, err
+	}
+	target, err := resolveSafeExistingPath(mount.root, apiPath)
+	if err != nil {
+		return "", 0, err
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return "", 0, mapFileError(err)
+	}
+	if info.IsDir() {
+		return "", 0, model.ErrPathInvalid
+	}
+	if info.Size() > MaxEditBytes {
+		return "", info.Size(), model.ErrFileTooLarge
+	}
+
+	data, err := os.ReadFile(target)
+	if err != nil {
+		return "", 0, mapFileError(err)
+	}
+	if isBinaryContent(data) {
+		return "", info.Size(), model.ErrFileBinary
+	}
+	return string(data), info.Size(), nil
+}
+
+// WriteContent 将文本内容写入指定文件（覆盖）。
+func (s *FileService) WriteContent(ctx context.Context, containerID, mountName, apiPath, content string) error {
+	mount, err := s.resolveWritableMount(ctx, containerID, mountName)
+	if err != nil {
+		return err
+	}
+	target, err := resolveSafeNewPath(mount.root, apiPath)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return fmt.Errorf("create parent dir: %w", err)
+	}
+	return os.WriteFile(target, []byte(content), 0o644)
+}
+
+// isBinaryContent 通过检查 NUL 字节判断内容是否为二进制。
+func isBinaryContent(data []byte) bool {
+	// 检查前 8 KB 即可覆盖绝大多数情况。
+	check := data
+	if len(check) > 8192 {
+		check = check[:8192]
+	}
+	for _, b := range check {
+		if b == 0 {
+			return true
+		}
+	}
+	return false
+}

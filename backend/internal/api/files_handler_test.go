@@ -13,12 +13,14 @@ import (
 )
 
 type mockFileManager struct {
-	mountsFn   func(ctx context.Context, containerID string) ([]model.FileMount, error)
-	listFn     func(ctx context.Context, containerID, mountName, path string) ([]model.FileEntry, error)
-	createFn   func(ctx context.Context, containerID, mountName, path string) error
-	deleteFn   func(ctx context.Context, containerID, mountName, path string, recursive bool) error
-	downloadFn func(ctx context.Context, containerID, mountName, path string) (*os.File, os.FileInfo, error)
-	uploadFn   func(ctx context.Context, containerID, mountName, path string, reader io.Reader) error
+	mountsFn       func(ctx context.Context, containerID string) ([]model.FileMount, error)
+	listFn         func(ctx context.Context, containerID, mountName, path string) ([]model.FileEntry, error)
+	createFn       func(ctx context.Context, containerID, mountName, path string) error
+	deleteFn       func(ctx context.Context, containerID, mountName, path string, recursive bool) error
+	downloadFn     func(ctx context.Context, containerID, mountName, path string) (*os.File, os.FileInfo, error)
+	uploadFn       func(ctx context.Context, containerID, mountName, path string, reader io.Reader) error
+	readContentFn  func(ctx context.Context, containerID, mountName, path string) (string, int64, error)
+	writeContentFn func(ctx context.Context, containerID, mountName, path, content string) error
 }
 
 func (m *mockFileManager) Mounts(ctx context.Context, containerID string) ([]model.FileMount, error) {
@@ -43,6 +45,20 @@ func (m *mockFileManager) OpenDownload(ctx context.Context, containerID, mountNa
 
 func (m *mockFileManager) SaveUpload(ctx context.Context, containerID, mountName, path string, reader io.Reader) error {
 	return m.uploadFn(ctx, containerID, mountName, path, reader)
+}
+
+func (m *mockFileManager) ReadContent(ctx context.Context, containerID, mountName, path string) (string, int64, error) {
+	if m.readContentFn != nil {
+		return m.readContentFn(ctx, containerID, mountName, path)
+	}
+	return "", 0, nil
+}
+
+func (m *mockFileManager) WriteContent(ctx context.Context, containerID, mountName, path, content string) error {
+	if m.writeContentFn != nil {
+		return m.writeContentFn(ctx, containerID, mountName, path, content)
+	}
+	return nil
 }
 
 func newFilesTestRouter(files *mockFileManager) http.Handler {

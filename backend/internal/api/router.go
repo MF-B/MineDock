@@ -42,6 +42,8 @@ func NewRouter(
 		mux.HandleFunc("POST /api/instances/{id}/files/upload", files.HandleUpload)
 		mux.HandleFunc("GET /api/instances/{id}/files/download", files.HandleDownload)
 		mux.HandleFunc("DELETE /api/instances/{id}/files", files.HandleDelete)
+		mux.HandleFunc("GET /api/instances/{id}/files/content", files.HandleReadContent)
+		mux.HandleFunc("PUT /api/instances/{id}/files/content", files.HandleWriteContent)
 	}
 	if monitor != nil {
 		mux.HandleFunc("GET /api/monitor/server", monitor.HandleGetServerMetrics)

@@ -23,6 +23,8 @@ type InstanceFileManager interface {
 	Delete(ctx context.Context, containerID, mountName, path string, recursive bool) error
 	OpenDownload(ctx context.Context, containerID, mountName, path string) (*os.File, os.FileInfo, error)
 	SaveUpload(ctx context.Context, containerID, mountName, path string, reader io.Reader) error
+	ReadContent(ctx context.Context, containerID, mountName, path string) (string, int64, error)
+	WriteContent(ctx context.Context, containerID, mountName, path, content string) error
 }
 
 // FilesHandler 暴露实例文件管理 HTTP 处理器。
@@ -38,6 +40,17 @@ func NewFilesHandler(files InstanceFileManager) *FilesHandler {
 type createDirRequest struct {
 	Mount string `json:"mount"`
 	Path  string `json:"path"`
+}
+
+type writeContentRequest struct {
+	Mount   string `json:"mount"`
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+type readContentResponse struct {
+	Content string `json:"content"`
+	Size    int64  `json:"size"`
 }
 
 // HandleMounts 处理 GET /api/instances/{id}/files/mounts。
@@ -185,6 +198,48 @@ func (h *FilesHandler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 		recursive = parsed
 	}
 	if err := h.files.Delete(r.Context(), id, r.URL.Query().Get("mount"), r.URL.Query().Get("path"), recursive); err != nil {
+		writeJSON(w, mapErrorCode(err), statusResponse{Status: "error", Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, statusResponse{Status: "success"})
+}
+
+// HandleReadContent 处理 GET /api/instances/{id}/files/content。
+func (h *FilesHandler) HandleReadContent(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.files == nil {
+		writeJSON(w, http.StatusServiceUnavailable, statusResponse{Status: "error", Error: "file service unavailable"})
+		return
+	}
+	id, ok := pathContainerID(r)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, statusResponse{Status: "error", Error: "invalid container id"})
+		return
+	}
+	content, size, err := h.files.ReadContent(r.Context(), id, r.URL.Query().Get("mount"), r.URL.Query().Get("path"))
+	if err != nil {
+		writeJSON(w, mapErrorCode(err), statusResponse{Status: "error", Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, readContentResponse{Content: content, Size: size})
+}
+
+// HandleWriteContent 处理 PUT /api/instances/{id}/files/content。
+func (h *FilesHandler) HandleWriteContent(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.files == nil {
+		writeJSON(w, http.StatusServiceUnavailable, statusResponse{Status: "error", Error: "file service unavailable"})
+		return
+	}
+	id, ok := pathContainerID(r)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, statusResponse{Status: "error", Error: "invalid container id"})
+		return
+	}
+	var req writeContentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, statusResponse{Status: "error", Error: "invalid json body"})
+		return
+	}
+	if err := h.files.WriteContent(r.Context(), id, req.Mount, req.Path, req.Content); err != nil {
 		writeJSON(w, mapErrorCode(err), statusResponse{Status: "error", Error: err.Error()})
 		return
 	}

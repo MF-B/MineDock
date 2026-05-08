@@ -76,6 +76,18 @@
       "pathInvalid": "文件路径不合法。",
       "fileNotFound": "文件不存在或已被删除。",
       "uploadTooLarge": "上传文件过大。"
+    },
+    "editor": {
+      "loading": "正在加载文件内容...",
+      "save": "保存",
+      "cancel": "返回",
+      "saving": "保存中...",
+      "saveSuccess": "文件已保存。",
+      "readOnly": "只读",
+      "fileTooLarge": "该文件过大，无法在线编辑。请使用下载/上传代替。",
+      "fileBinary": "该文件为二进制文件，不支持在线编辑。",
+      "unsavedChanges": "有未保存的更改，确认放弃吗？",
+      "edit": "编辑"
     }
   },
   "createModal": {

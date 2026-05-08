@@ -469,3 +469,32 @@ export function getSystemLogs(tail: number, level = "", query = ""): Promise<Sys
   }
   return request<SystemLogsResponse>(`/system/logs?${params.toString()}`, { method: "GET" });
 }
+
+export interface FileContentResponse {
+  content: string;
+  size: number;
+}
+
+export function readInstanceFileContent(
+  containerId: string,
+  mount: string,
+  path: string,
+): Promise<FileContentResponse> {
+  const query = new URLSearchParams({ mount, path });
+  return request<FileContentResponse>(
+    `/instances/${encodeURIComponent(containerId)}/files/content?${query.toString()}`,
+    { method: "GET" },
+  );
+}
+
+export function writeInstanceFileContent(
+  containerId: string,
+  mount: string,
+  path: string,
+  content: string,
+): Promise<unknown> {
+  return request(`/instances/${encodeURIComponent(containerId)}/files/content`, {
+    method: "PUT",
+    body: { mount, path, content },
+  });
+}

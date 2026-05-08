@@ -41,5 +41,11 @@ var ErrFileNotFound = errors.New("file not found")
 // ErrUploadTooLarge 表示上传文件超过服务端大小限制。
 var ErrUploadTooLarge = errors.New("upload file too large")
 
+// ErrFileTooLarge 表示文件超过在线编辑大小限制。
+var ErrFileTooLarge = errors.New("file too large to edit")
+
+// ErrFileBinary 表示文件内容为二进制，不支持在线编辑。
+var ErrFileBinary = errors.New("binary file cannot be edited")
+
 // ErrPortUnavailable 表示宿主机端口已被占用。
 var ErrPortUnavailable = errors.New("host port is unavailable")

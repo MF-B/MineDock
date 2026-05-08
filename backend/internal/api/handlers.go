@@ -182,6 +182,10 @@ func mapErrorCode(err error) int {
 		return http.StatusBadRequest
 	case errors.Is(err, model.ErrUploadTooLarge):
 		return http.StatusBadRequest
+	case errors.Is(err, model.ErrFileTooLarge):
+		return http.StatusBadRequest
+	case errors.Is(err, model.ErrFileBinary):
+		return http.StatusBadRequest
 	case errors.Is(err, model.ErrMountNotFound):
 		return http.StatusNotFound
 	case errors.Is(err, model.ErrFileNotFound):

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   ApiRequestError,
@@ -10,8 +10,11 @@ import {
   type FileMount,
   listInstanceFileMounts,
   listInstanceFiles,
+  readInstanceFileContent,
   uploadInstanceFile,
+  writeInstanceFileContent,
 } from "../api";
+import { useCodeEditor } from "../composables/useCodeEditor";
 
 const props = defineProps<{
   containerId: string;
@@ -26,6 +29,18 @@ const files = ref<FileEntry[]>([]);
 const loading = ref(false);
 const errorText = ref("");
 const uploadInput = ref<HTMLInputElement | null>(null);
+
+// --- Editor state ---
+const editorMode = ref(false);
+const editorFileName = ref("");
+const editorFilePath = ref("");
+const editorLoading = ref(false);
+const editorSaving = ref(false);
+const editorError = ref("");
+const editorFileSize = ref(0);
+const editorOriginalContent = ref("");
+
+const { editorRef, create: createEditor, getContent, destroy: destroyEditor } = useCodeEditor();
 
 const activeMount = computed(() =>
   mounts.value.find((mount) => mount.name === selectedMount.value),
@@ -43,6 +58,11 @@ const breadcrumbs = computed(() => {
   return crumbs;
 });
 
+const editorDirty = computed(() => {
+  if (!editorMode.value) return false;
+  return getContent() !== editorOriginalContent.value;
+});
+
 onMounted(() => {
   void loadMounts();
 });
@@ -55,6 +75,8 @@ function mapFileError(err: unknown): string {
     if (backendMessage.includes("invalid file path")) return t("files.errors.pathInvalid");
     if (backendMessage.includes("file not found")) return t("files.errors.fileNotFound");
     if (backendMessage.includes("upload file too large")) return t("files.errors.uploadTooLarge");
+    if (backendMessage.includes("file too large to edit")) return t("files.editor.fileTooLarge");
+    if (backendMessage.includes("binary file")) return t("files.editor.fileBinary");
     return t("errors.requestFailedWithStatus", { status: err.status });
   }
   return t("errors.unknown");
@@ -181,163 +203,277 @@ async function handleDelete(file: FileEntry): Promise<void> {
     errorText.value = mapFileError(err);
   }
 }
+
+// --- Editor functions ---
+async function openEditor(file: FileEntry): Promise<void> {
+  if (file.is_dir || !selectedMount.value) return;
+  const filePath = childPath(file.name);
+  editorMode.value = true;
+  editorFileName.value = file.name;
+  editorFilePath.value = filePath;
+  editorLoading.value = true;
+  editorError.value = "";
+  editorFileSize.value = 0;
+
+  try {
+    const resp = await readInstanceFileContent(props.containerId, selectedMount.value, filePath);
+    editorFileSize.value = resp.size;
+    editorOriginalContent.value = resp.content;
+    await nextTick();
+    createEditor(resp.content, file.name, !canWrite.value);
+  } catch (err) {
+    editorError.value = mapFileError(err);
+  } finally {
+    editorLoading.value = false;
+  }
+}
+
+function closeEditor(): void {
+  if (editorDirty.value && !window.confirm(t("files.editor.unsavedChanges"))) return;
+  destroyEditor();
+  editorMode.value = false;
+  editorError.value = "";
+}
+
+async function saveEditor(): Promise<void> {
+  if (!selectedMount.value || !canWrite.value || editorSaving.value) return;
+  editorSaving.value = true;
+  editorError.value = "";
+  try {
+    const content = getContent();
+    await writeInstanceFileContent(
+      props.containerId,
+      selectedMount.value,
+      editorFilePath.value,
+      content,
+    );
+    editorOriginalContent.value = content;
+  } catch (err) {
+    editorError.value = mapFileError(err);
+  } finally {
+    editorSaving.value = false;
+  }
+}
 </script>
 
 <template>
   <div class="files-panel">
-    <!-- Toolbar -->
-    <div class="files-toolbar">
-      <div class="breadcrumbs">
-        <template v-for="(crumb, index) in breadcrumbs" :key="crumb.path">
-          <span
-            class="breadcrumb-item"
-            :class="{ active: index === breadcrumbs.length - 1 }"
-            @click="navigateTo(crumb.path)"
+    <!-- Editor Mode -->
+    <template v-if="editorMode">
+      <div class="editor-toolbar">
+        <div class="editor-title">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="icon"
           >
-            {{ crumb.name }}
-          </span>
-          <span v-if="index < breadcrumbs.length - 1" class="breadcrumb-separator">/</span>
-        </template>
+            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+            <polyline points="13 2 13 9 20 9"></polyline>
+          </svg>
+          <span class="editor-filename">{{ editorFileName }}</span>
+          <span v-if="!canWrite" class="readonly-badge">{{ $t("files.editor.readOnly") }}</span>
+        </div>
+        <div class="editor-actions">
+          <span v-if="editorFileSize" class="editor-size">{{ formatSize(editorFileSize) }}</span>
+          <button
+            v-if="canWrite"
+            class="action-btn primary"
+            :disabled="editorSaving || editorLoading"
+            @click="saveEditor"
+          >
+            {{ editorSaving ? $t("files.editor.saving") : $t("files.editor.save") }}
+          </button>
+          <button class="action-btn" @click="closeEditor">
+            {{ $t("files.editor.cancel") }}
+          </button>
+        </div>
       </div>
-      <div class="actions">
-        <select
-          v-if="mounts.length > 1"
-          v-model="selectedMount"
-          class="mount-select"
-          @change="handleMountChange"
-        >
-          <option v-for="mount in mounts" :key="mount.name" :value="mount.name">
-            {{ mount.name }}
-          </option>
-        </select>
-        <button class="action-btn" :disabled="!canWrite" @click="handleCreateDir">
-          {{ $t("files.actions.newFolder") }}
-        </button>
-        <button class="action-btn primary" :disabled="!canWrite" @click="triggerUpload">
-          {{ $t("files.actions.upload") }}
-        </button>
-        <input ref="uploadInput" class="upload-input" type="file" @change="handleUpload" />
-      </div>
-    </div>
-    <div v-if="errorText" class="error-state">{{ errorText }}</div>
+      <div v-if="editorError" class="error-state">{{ editorError }}</div>
+      <div v-if="editorLoading" class="editor-loading">{{ $t("files.editor.loading") }}</div>
+      <div v-show="!editorLoading && !editorError" ref="editorRef" class="editor-host"></div>
+    </template>
 
-    <!-- File List -->
-    <div class="files-list-container">
-      <table class="files-table">
-        <thead>
-          <tr>
-            <th class="col-name">{{ $t("files.columns.name") }}</th>
-            <th class="col-size">{{ $t("files.columns.size") }}</th>
-            <th class="col-date">{{ $t("files.columns.modified") }}</th>
-            <th class="col-actions">{{ $t("files.columns.actions") }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="loading">
-            <td colspan="4" class="empty-state">{{ $t("files.loading") }}</td>
-          </tr>
-          <tr v-else-if="files.length === 0">
-            <td colspan="4" class="empty-state">
-              {{ selectedMount ? $t("files.empty") : $t("files.noMounts") }}
-            </td>
-          </tr>
-          <tr
-            v-for="file in files"
-            :key="file.name"
-            class="file-row"
-            @dblclick="handleFileClick(file)"
+    <!-- File List Mode -->
+    <template v-else>
+      <!-- Toolbar -->
+      <div class="files-toolbar">
+        <div class="breadcrumbs">
+          <template v-for="(crumb, index) in breadcrumbs" :key="crumb.path">
+            <span
+              class="breadcrumb-item"
+              :class="{ active: index === breadcrumbs.length - 1 }"
+              @click="navigateTo(crumb.path)"
+            >
+              {{ crumb.name }}
+            </span>
+            <span v-if="index < breadcrumbs.length - 1" class="breadcrumb-separator">/</span>
+          </template>
+        </div>
+        <div class="actions">
+          <select
+            v-if="mounts.length > 1"
+            v-model="selectedMount"
+            class="mount-select"
+            @change="handleMountChange"
           >
-            <td class="col-name">
-              <div class="file-name-cell">
-                <span class="file-icon" :class="{ 'is-dir': file.is_dir }">
-                  <svg
-                    v-if="file.is_dir"
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    class="icon"
+            <option v-for="mount in mounts" :key="mount.name" :value="mount.name">
+              {{ mount.name }}
+            </option>
+          </select>
+          <button class="action-btn" :disabled="!canWrite" @click="handleCreateDir">
+            {{ $t("files.actions.newFolder") }}
+          </button>
+          <button class="action-btn primary" :disabled="!canWrite" @click="triggerUpload">
+            {{ $t("files.actions.upload") }}
+          </button>
+          <input ref="uploadInput" class="upload-input" type="file" @change="handleUpload" />
+        </div>
+      </div>
+      <div v-if="errorText" class="error-state">{{ errorText }}</div>
+
+      <!-- File List -->
+      <div class="files-list-container">
+        <table class="files-table">
+          <thead>
+            <tr>
+              <th class="col-name">{{ $t("files.columns.name") }}</th>
+              <th class="col-size">{{ $t("files.columns.size") }}</th>
+              <th class="col-date">{{ $t("files.columns.modified") }}</th>
+              <th class="col-actions">{{ $t("files.columns.actions") }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="loading">
+              <td colspan="4" class="empty-state">{{ $t("files.loading") }}</td>
+            </tr>
+            <tr v-else-if="files.length === 0">
+              <td colspan="4" class="empty-state">
+                {{ selectedMount ? $t("files.empty") : $t("files.noMounts") }}
+              </td>
+            </tr>
+            <tr
+              v-for="file in files"
+              :key="file.name"
+              class="file-row"
+              @dblclick="handleFileClick(file)"
+            >
+              <td class="col-name">
+                <div class="file-name-cell">
+                  <span class="file-icon" :class="{ 'is-dir': file.is_dir }">
+                    <svg
+                      v-if="file.is_dir"
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="icon"
+                    >
+                      <path
+                        d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                      ></path>
+                    </svg>
+                    <svg
+                      v-else
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="icon"
+                    >
+                      <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                      <polyline points="13 2 13 9 20 9"></polyline>
+                    </svg>
+                  </span>
+                  <span class="file-name" @click="handleFileClick(file)">{{ file.name }}</span>
+                </div>
+              </td>
+              <td class="col-size">{{ formatSize(file.size) }}</td>
+              <td class="col-date">{{ formatDate(file.modified_at) }}</td>
+              <td class="col-actions">
+                <div class="row-actions">
+                  <button
+                    v-if="!file.is_dir"
+                    class="icon-btn"
+                    :title="$t('files.editor.edit')"
+                    @click.stop="openEditor(file)"
                   >
-                    <path
-                      d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
-                    ></path>
-                  </svg>
-                  <svg
-                    v-else
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    class="icon"
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="icon"
+                    >
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                  </button>
+                  <button
+                    class="icon-btn"
+                    :disabled="file.is_dir"
+                    :title="$t('files.actions.download')"
+                    @click.stop="handleDownload(file)"
                   >
-                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-                    <polyline points="13 2 13 9 20 9"></polyline>
-                  </svg>
-                </span>
-                <span class="file-name" @click="handleFileClick(file)">{{ file.name }}</span>
-              </div>
-            </td>
-            <td class="col-size">{{ formatSize(file.size) }}</td>
-            <td class="col-date">{{ formatDate(file.modified_at) }}</td>
-            <td class="col-actions">
-              <div class="row-actions">
-                <button
-                  class="icon-btn"
-                  :disabled="file.is_dir"
-                  :title="$t('files.actions.download')"
-                  @click.stop="handleDownload(file)"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    class="icon"
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="icon"
+                    >
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="7 10 12 15 17 10"></polyline>
+                      <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                  </button>
+                  <button
+                    class="icon-btn danger"
+                    :disabled="!canWrite"
+                    :title="$t('files.actions.delete')"
+                    @click.stop="handleDelete(file)"
                   >
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="7 10 12 15 17 10"></polyline>
-                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                  </svg>
-                </button>
-                <button
-                  class="icon-btn danger"
-                  :disabled="!canWrite"
-                  :title="$t('files.actions.delete')"
-                  @click.stop="handleDelete(file)"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    class="icon"
-                  >
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path
-                      d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-                    ></path>
-                    <line x1="10" y1="11" x2="10" y2="17"></line>
-                    <line x1="14" y1="11" x2="14" y2="17"></line>
-                  </svg>
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="icon"
+                    >
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path
+                        d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                      ></path>
+                      <line x1="10" y1="11" x2="10" y2="17"></line>
+                      <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -353,6 +489,90 @@ async function handleDelete(file: FileEntry): Promise<void> {
   overflow: hidden;
 }
 
+/* --- Editor styles --- */
+.editor-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 2px solid var(--card-border-inner);
+  background: var(--card-bg);
+  gap: 12px;
+}
+
+.editor-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--card-text);
+  min-width: 0;
+}
+
+.editor-title .icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--create-border-outer);
+}
+
+.editor-filename {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.readonly-badge {
+  font-size: 11px;
+  font-weight: bold;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border: 2px solid var(--card-border);
+  background: var(--create-brass-dark);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.editor-size {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: bold;
+}
+
+.editor-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 40px;
+}
+
+.editor-host {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Override CodeMirror to fill container */
+.editor-host :deep(.cm-editor) {
+  height: 100%;
+}
+
+.editor-host :deep(.cm-scroller) {
+  overflow: auto;
+}
+
+/* --- File list styles (unchanged) --- */
 .files-toolbar {
   display: flex;
   justify-content: space-between;
@@ -511,7 +731,7 @@ async function handleDelete(file: FileEntry): Promise<void> {
 }
 
 .col-actions {
-  width: 100px;
+  width: 130px;
   text-align: right;
 }
 

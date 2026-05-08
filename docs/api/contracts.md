@@ -375,6 +375,46 @@
 - `path` 使用 POSIX 语义，禁止 `..` 与反斜杠。
 - 服务端会校验最终文件系统路径位于对应 bind mount 根目录内，并拒绝符号链接逃逸。
 
+### GET /api/instances/:id/files/content
+
+- 说明：读取指定文件的文本内容，用于在线编辑。限制 1 MB，拒绝二进制文件
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（ID 非法/path 非法/文件过大/二进制文件）、`404`（mount 或文件不存在）、`500`
+- 请求参数：
+  - query：`mount`（模板卷名）
+  - query：`path`（POSIX 路径）
+- 返回结果：
+
+```json
+{
+  "content": "文件文本内容...",
+  "size": 1024
+}
+```
+
+### PUT /api/instances/:id/files/content
+
+- 说明：保存文本内容到指定文件（覆盖写入）
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（ID 非法/path 非法/JSON 非法）、`404`（mount 不存在）、`409`（只读挂载卷）、`500`
+- 请求参数：
+
+```json
+{
+  "mount": "server-data",
+  "path": "/server.properties",
+  "content": "文件文本内容..."
+}
+```
+
+- 返回结果：
+
+```json
+{ "status": "success" }
+```
+
 ### GET /api/instances/:id/stats
 
 - 说明：获取单个容器的资源使用快照（CPU、内存、网络 I/O、磁盘 I/O）

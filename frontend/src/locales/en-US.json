@@ -76,6 +76,18 @@
       "pathInvalid": "The file path is invalid.",
       "fileNotFound": "The file no longer exists.",
       "uploadTooLarge": "The uploaded file is too large."
+    },
+    "editor": {
+      "loading": "Loading file content...",
+      "save": "Save",
+      "cancel": "Back",
+      "saving": "Saving...",
+      "saveSuccess": "File saved.",
+      "readOnly": "Read-only",
+      "fileTooLarge": "This file is too large to edit online. Use download/upload instead.",
+      "fileBinary": "This is a binary file and cannot be edited online.",
+      "unsavedChanges": "You have unsaved changes. Discard them?",
+      "edit": "Edit"
     }
   },
   "createModal": {
