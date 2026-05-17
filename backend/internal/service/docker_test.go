@@ -17,6 +17,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/errdefs"
 
 	"minedock/backend/internal/model"
 )
@@ -184,20 +185,26 @@ type fakeDockerClient struct {
 	inspectResp container.InspectResponse
 	inspectErr  error
 
-	createResp   container.CreateResponse
-	createErr    error
-	createCfg    *container.Config
-	createHost   *container.HostConfig
-	createName   string
-	removeErr    error
-	removedIDs   []string
-	listResp     []container.Summary
-	listErr      error
-	startErr     error
-	stopErr      error
-	imageList    []image.Summary
-	imageListErr error
-	imagePullErr error
+	createResp    container.CreateResponse
+	createErr     error
+	createCfg     *container.Config
+	createHost    *container.HostConfig
+	createName    string
+	removeErr     error
+	removedIDs    []string
+	removeOptions []container.RemoveOptions
+	listResp      []container.Summary
+	listErr       error
+	startErr      error
+	stopErr       error
+	restartErr    error
+	restartedIDs  []string
+	killErr       error
+	killedIDs     []string
+	killSignals   []string
+	imageList     []image.Summary
+	imageListErr  error
+	imagePullErr  error
 }
 
 func (f *fakeDockerClient) ContainerCreate(
@@ -227,8 +234,9 @@ func (f *fakeDockerClient) ContainerInspect(_ context.Context, _ string) (contai
 	return f.inspectResp, nil
 }
 
-func (f *fakeDockerClient) ContainerRemove(_ context.Context, containerID string, _ container.RemoveOptions) error {
+func (f *fakeDockerClient) ContainerRemove(_ context.Context, containerID string, options container.RemoveOptions) error {
 	f.removedIDs = append(f.removedIDs, containerID)
+	f.removeOptions = append(f.removeOptions, options)
 	if f.removeErr != nil {
 		return f.removeErr
 	}
@@ -241,6 +249,17 @@ func (f *fakeDockerClient) ContainerStart(_ context.Context, _ string, _ contain
 
 func (f *fakeDockerClient) ContainerStop(_ context.Context, _ string, _ container.StopOptions) error {
 	return f.stopErr
+}
+
+func (f *fakeDockerClient) ContainerRestart(_ context.Context, containerID string, _ container.StopOptions) error {
+	f.restartedIDs = append(f.restartedIDs, containerID)
+	return f.restartErr
+}
+
+func (f *fakeDockerClient) ContainerKill(_ context.Context, containerID, signal string) error {
+	f.killedIDs = append(f.killedIDs, containerID)
+	f.killSignals = append(f.killSignals, signal)
+	return f.killErr
 }
 
 func (f *fakeDockerClient) ContainerList(_ context.Context, _ container.ListOptions) ([]container.Summary, error) {
@@ -810,6 +829,104 @@ func TestListInstances_IncludesGameID(t *testing.T) {
 	}
 }
 
+func TestRestartInstance_RunningKeepsContainerID(t *testing.T) {
+	cli := &fakeDockerClient{
+		inspectResp: container.InspectResponse{
+			ContainerJSONBase: &container.ContainerJSONBase{
+				State: &container.State{Running: true},
+			},
+			Config: &container.Config{Labels: map[string]string{
+				nameLabelKey:   "server-1",
+				gameIDLabelKey: "minecraft-java",
+			}},
+		},
+	}
+	store := newFakeInstanceStore(model.Instance{ContainerID: "c1", Name: "server-1", GameID: "minecraft-java", Status: "Running"})
+	svc := newTestDockerService(t, cli, store, &fakeRegistry{})
+
+	if err := svc.RestartInstance(context.Background(), "c1"); err != nil {
+		t.Fatalf("RestartInstance: %v", err)
+	}
+	if !slices.Contains(cli.restartedIDs, "c1") {
+		t.Fatalf("expected container restarted, got %+v", cli.restartedIDs)
+	}
+	if saved := store.instances["c1"]; saved.ContainerID != "c1" || saved.Status != "Running" {
+		t.Fatalf("unexpected saved instance: %+v", saved)
+	}
+}
+
+func TestRestartInstance_StoppedRejected(t *testing.T) {
+	cli := &fakeDockerClient{
+		inspectResp: container.InspectResponse{
+			ContainerJSONBase: &container.ContainerJSONBase{
+				State: &container.State{Running: false},
+			},
+		},
+	}
+	store := newFakeInstanceStore(model.Instance{ContainerID: "c1", Name: "server-1", GameID: "minecraft-java"})
+	svc := newTestDockerService(t, cli, store, &fakeRegistry{})
+
+	err := svc.RestartInstance(context.Background(), "c1")
+	if !errors.Is(err, model.ErrInstanceNotRunning) {
+		t.Fatalf("expected ErrInstanceNotRunning, got %v", err)
+	}
+	if len(cli.restartedIDs) != 0 {
+		t.Fatalf("expected no restart call, got %+v", cli.restartedIDs)
+	}
+}
+
+func TestForceStopInstance_RunningUsesSIGKILL(t *testing.T) {
+	cli := &fakeDockerClient{
+		inspectResp: container.InspectResponse{
+			ContainerJSONBase: &container.ContainerJSONBase{
+				State: &container.State{Running: true},
+			},
+			Config: &container.Config{Labels: map[string]string{
+				nameLabelKey:   "server-1",
+				gameIDLabelKey: "minecraft-java",
+			}},
+		},
+	}
+	store := newFakeInstanceStore(model.Instance{ContainerID: "c1", Name: "server-1", GameID: "minecraft-java", Status: "Running"})
+	svc := newTestDockerService(t, cli, store, &fakeRegistry{})
+
+	if err := svc.ForceStopInstance(context.Background(), "c1"); err != nil {
+		t.Fatalf("ForceStopInstance: %v", err)
+	}
+	if len(cli.killedIDs) != 1 || cli.killedIDs[0] != "c1" || cli.killSignals[0] != "SIGKILL" {
+		t.Fatalf("expected SIGKILL for c1, got ids=%+v signals=%+v", cli.killedIDs, cli.killSignals)
+	}
+	if saved := store.instances["c1"]; saved.Status != "Stopped" {
+		t.Fatalf("expected stopped state, got %+v", saved)
+	}
+}
+
+func TestForceStopInstance_StoppedIsIdempotent(t *testing.T) {
+	cli := &fakeDockerClient{
+		inspectResp: container.InspectResponse{
+			ContainerJSONBase: &container.ContainerJSONBase{
+				State: &container.State{Running: false},
+			},
+			Config: &container.Config{Labels: map[string]string{
+				nameLabelKey:   "server-1",
+				gameIDLabelKey: "minecraft-java",
+			}},
+		},
+	}
+	store := newFakeInstanceStore(model.Instance{ContainerID: "c1", Name: "server-1", GameID: "minecraft-java", Status: "Stopped"})
+	svc := newTestDockerService(t, cli, store, &fakeRegistry{})
+
+	if err := svc.ForceStopInstance(context.Background(), "c1"); err != nil {
+		t.Fatalf("ForceStopInstance: %v", err)
+	}
+	if len(cli.killedIDs) != 0 {
+		t.Fatalf("expected no kill call, got %+v", cli.killedIDs)
+	}
+	if saved := store.instances["c1"]; saved.Status != "Stopped" {
+		t.Fatalf("expected stopped state, got %+v", saved)
+	}
+}
+
 func TestDeleteInstance_PurgeDataRemovesInstanceDirAndStore(t *testing.T) {
 	dataDir := t.TempDir()
 	instanceDir := filepath.Join(dataDir, "server-1")
@@ -836,6 +953,79 @@ func TestDeleteInstance_PurgeDataRemovesInstanceDirAndStore(t *testing.T) {
 	}
 	if !slices.Contains(cli.removedIDs, "c1") {
 		t.Fatalf("expected container removed, got %+v", cli.removedIDs)
+	}
+	if _, ok := store.instances["c1"]; ok {
+		t.Fatal("expected instance record to be deleted")
+	}
+	if _, err := os.Stat(instanceDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected instance dir removed, got %v", err)
+	}
+}
+
+func TestDeleteInstance_RunningRejected(t *testing.T) {
+	cli := &fakeDockerClient{
+		inspectResp: container.InspectResponse{
+			ContainerJSONBase: &container.ContainerJSONBase{
+				State: &container.State{Running: true},
+			},
+		},
+	}
+	store := newFakeInstanceStore(model.Instance{ContainerID: "c1", Name: "server-1", GameID: "minecraft-java"})
+	svc := newTestDockerService(t, cli, store, &fakeRegistry{})
+
+	err := svc.DeleteInstance(context.Background(), "c1", false)
+	if !errors.Is(err, model.ErrInstanceRunning) {
+		t.Fatalf("expected ErrInstanceRunning, got %v", err)
+	}
+	if len(cli.removedIDs) != 0 {
+		t.Fatalf("expected no remove call, got %+v", cli.removedIDs)
+	}
+}
+
+func TestForceDeleteInstance_RunningUsesForceRemove(t *testing.T) {
+	cli := &fakeDockerClient{
+		inspectResp: container.InspectResponse{
+			ContainerJSONBase: &container.ContainerJSONBase{
+				State: &container.State{Running: true},
+			},
+			Config: &container.Config{Labels: map[string]string{nameLabelKey: "server-1"}},
+		},
+	}
+	store := newFakeInstanceStore(model.Instance{ContainerID: "c1", Name: "server-1", GameID: "minecraft-java"})
+	svc := newTestDockerService(t, cli, store, &fakeRegistry{})
+
+	if err := svc.ForceDeleteInstance(context.Background(), "c1", false); err != nil {
+		t.Fatalf("ForceDeleteInstance: %v", err)
+	}
+	if len(cli.removeOptions) != 1 || !cli.removeOptions[0].Force {
+		t.Fatalf("expected force remove, got %+v", cli.removeOptions)
+	}
+	if _, ok := store.instances["c1"]; ok {
+		t.Fatal("expected instance record to be deleted")
+	}
+}
+
+func TestForceDeleteInstance_NotFoundCleansStoreAndData(t *testing.T) {
+	dataDir := t.TempDir()
+	instanceDir := filepath.Join(dataDir, "server-1")
+	volumeDir := filepath.Join(instanceDir, "volumes", "world")
+	if err := os.MkdirAll(volumeDir, 0o755); err != nil {
+		t.Fatalf("mkdir volume dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(volumeDir, "level.dat"), []byte("data"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	notFound := errdefs.NotFound(errors.New("missing container"))
+	cli := &fakeDockerClient{
+		inspectErr: notFound,
+		removeErr:  notFound,
+	}
+	store := newFakeInstanceStore(model.Instance{ContainerID: "c1", Name: "server-1", GameID: "minecraft-java"})
+	svc := NewDockerServiceWithDataDir(cli, store, &fakeRegistry{}, dataDir)
+
+	if err := svc.ForceDeleteInstance(context.Background(), "c1", true); err != nil {
+		t.Fatalf("ForceDeleteInstance: %v", err)
 	}
 	if _, ok := store.instances["c1"]; ok {
 		t.Fatal("expected instance record to be deleted")

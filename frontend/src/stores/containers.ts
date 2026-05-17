@@ -9,6 +9,9 @@ import {
   type PortMapping,
   type ResourceLimits,
   deleteInstance as apiDelete,
+  forceDeleteInstance as apiForceDelete,
+  forceStopInstance as apiForceStop,
+  restartInstance as apiRestart,
   startInstance as apiStart,
   stopInstance as apiStop,
 } from "../api/index";
@@ -27,6 +30,7 @@ const backendMessageKeyMap: Record<string, string> = {
   "invalid container id": "errors.invalidContainerId",
   "instance name already exists": "errors.instanceNameExists",
   "instance is running, stop it before delete": "errors.instanceRunning",
+  "instance is not running": "errors.instanceNotRunning",
   "container must be stopped to update config": "errors.containerNotStopped",
   "invalid resource limits": "errors.invalidResourceLimits",
   "host port is unavailable": "errors.portUnavailable",
@@ -217,13 +221,27 @@ export const useContainerStore = defineStore("containers", () => {
   }
 
   // 删除结果与刷新都在 store 内完成，破坏性确认由视图层负责。
-  async function remove(containerId: string, purgeData = false): Promise<void> {
+  async function remove(containerId: string, purgeData = false): Promise<boolean> {
     try {
       await apiDelete(containerId, purgeData);
       printI18n("status.deleteSuccess", undefined, "success");
       await fetchInstances();
+      return true;
     } catch (err) {
       printError(err);
+      return false;
+    }
+  }
+
+  async function forceRemove(containerId: string, purgeData = false): Promise<boolean> {
+    try {
+      await apiForceDelete(containerId, purgeData);
+      printI18n("status.forceDeleteSuccess", undefined, "success");
+      await fetchInstances();
+      return true;
+    } catch (err) {
+      printError(err);
+      return false;
     }
   }
 
@@ -237,6 +255,32 @@ export const useContainerStore = defineStore("containers", () => {
       } else {
         await apiStart(instance.container_id);
       }
+    } catch (err) {
+      printError(err);
+      success = false;
+    } finally {
+      await fetchInstances();
+    }
+    return success;
+  }
+
+  async function restart(instance: Instance): Promise<boolean> {
+    let success = true;
+    try {
+      await apiRestart(instance.container_id);
+    } catch (err) {
+      printError(err);
+      success = false;
+    } finally {
+      await fetchInstances();
+    }
+    return success;
+  }
+
+  async function forceStop(instance: Instance): Promise<boolean> {
+    let success = true;
+    try {
+      await apiForceStop(instance.container_id);
     } catch (err) {
       printError(err);
       success = false;
@@ -264,7 +308,10 @@ export const useContainerStore = defineStore("containers", () => {
     fetchInstances,
     create,
     remove,
+    forceRemove,
     toggle,
+    restart,
+    forceStop,
     isRunning,
   };
 });

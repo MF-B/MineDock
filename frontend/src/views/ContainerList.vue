@@ -5,12 +5,21 @@ import { useI18n } from "vue-i18n";
 import { useContainerStore } from "../stores/containers";
 import { useInstanceSync } from "../composables/useInstanceSync";
 
+type DangerAction = "delete" | "force-stop" | "force-delete";
+type DangerCopyKey = "delete" | "forceStop" | "forceDelete";
+
 const { t } = useI18n();
 const router = useRouter();
 const store = useContainerStore();
 const instanceSync = useInstanceSync();
-const pendingDeleteId = ref<string | null>(null);
-const purgeDeleteData = ref(false);
+const pendingDanger = ref<{ action: DangerAction; containerId: string; name: string } | null>(null);
+const purgeDangerData = ref(false);
+
+const dangerCopyKeys: Record<DangerAction, DangerCopyKey> = {
+  delete: "delete",
+  "force-stop": "forceStop",
+  "force-delete": "forceDelete",
+};
 
 onMounted(() => {
   instanceSync.start();
@@ -34,23 +43,47 @@ function openInstanceDetail(containerId: string): void {
 }
 
 // 删除属于破坏性操作，执行前必须二次确认。
-function handleDelete(containerId: string): void {
-  pendingDeleteId.value = containerId;
-  purgeDeleteData.value = false;
+function openDanger(action: DangerAction, containerId: string, name: string): void {
+  pendingDanger.value = { action, containerId, name };
+  purgeDangerData.value = false;
 }
 
-function cancelDelete(): void {
-  pendingDeleteId.value = null;
-  purgeDeleteData.value = false;
+function cancelDanger(): void {
+  pendingDanger.value = null;
+  purgeDangerData.value = false;
 }
 
-async function confirmDelete(): Promise<void> {
-  const containerId = pendingDeleteId.value;
-  if (!containerId) return;
-  const purgeData = purgeDeleteData.value;
-  cancelDelete();
+function dangerCopyKey(action: DangerAction): DangerCopyKey {
+  return dangerCopyKeys[action];
+}
+
+async function confirmDanger(): Promise<void> {
+  const pending = pendingDanger.value;
+  if (!pending) return;
+  const purgeData = purgeDangerData.value;
+  cancelDanger();
+
+  if (pending.action === "force-stop") {
+    store.print(t("status.forceStopping", { name: pending.name }));
+    const success = await store.forceStop({
+      container_id: pending.containerId,
+      name: pending.name,
+      status: "Running",
+    });
+    if (success) {
+      store.print(t("status.forceStopSuccess", { name: pending.name }));
+    }
+    return;
+  }
+
+  if (pending.action === "force-delete") {
+    store.print(t("status.forceDeleting", { name: pending.name }));
+    await store.forceRemove(pending.containerId, purgeData);
+    return;
+  }
+
   store.print(t("status.deleting"));
-  await store.remove(containerId, purgeData);
+  await store.remove(pending.containerId, purgeData);
 }
 
 // 根据当前运行态切换 start/stop，并输出阶段性反馈以避免静默操作。
@@ -71,6 +104,18 @@ async function handleToggle(instance: {
     store.print(t("status.stopSuccess", { name: instance.name }));
   } else {
     store.print(t("status.startSuccess", { name: instance.name }));
+  }
+}
+
+async function handleRestart(instance: {
+  container_id: string;
+  name: string;
+  status: string;
+}): Promise<void> {
+  store.print(t("status.restarting", { name: instance.name }));
+  const success = await store.restart(instance);
+  if (success) {
+    store.print(t("status.restartSuccess", { name: instance.name }));
   }
 }
 </script>
@@ -113,27 +158,56 @@ async function handleToggle(instance: {
             />
             <span class="slider round"></span>
           </label>
-          <button class="delete-btn" @click="handleDelete(item.container_id)">
+          <template v-if="store.isRunning(item.status)">
+            <button class="secondary-btn compact-btn" @click="handleRestart(item)">
+              {{ $t("containers.restart") }}
+            </button>
+            <button
+              class="danger-outline-btn compact-btn"
+              @click="openDanger('force-stop', item.container_id, item.name)"
+            >
+              {{ $t("containers.forceStop") }}
+            </button>
+            <button
+              class="delete-btn compact-btn"
+              @click="openDanger('force-delete', item.container_id, item.name)"
+            >
+              {{ $t("containers.forceDelete") }}
+            </button>
+          </template>
+          <button
+            v-else
+            class="delete-btn compact-btn"
+            @click="openDanger('delete', item.container_id, item.name)"
+          >
             {{ $t("containers.delete") }}
           </button>
         </div>
       </div>
     </div>
 
-    <div v-if="pendingDeleteId" class="modal-overlay" @click.self="cancelDelete">
+    <div v-if="pendingDanger" class="modal-overlay" @click.self="cancelDanger">
       <section class="delete-dialog" role="dialog" aria-modal="true">
-        <h2 class="dialog-title">{{ $t("containers.confirmDeleteTitle") }}</h2>
-        <p class="dialog-message">{{ $t("containers.confirmDelete") }}</p>
-        <label class="purge-option">
-          <input v-model="purgeDeleteData" type="checkbox" />
+        <h2 class="dialog-title">
+          {{ $t(`containers.${dangerCopyKey(pendingDanger.action)}Title`) }}
+        </h2>
+        <p class="dialog-message">
+          {{
+            $t(`containers.${dangerCopyKey(pendingDanger.action)}Message`, {
+              name: pendingDanger.name,
+            })
+          }}
+        </p>
+        <label v-if="pendingDanger.action !== 'force-stop'" class="purge-option">
+          <input v-model="purgeDangerData" type="checkbox" />
           <span>{{ $t("containers.confirmPurgeData") }}</span>
         </label>
         <div class="dialog-actions">
-          <button class="secondary-btn" @click="cancelDelete">
+          <button class="secondary-btn" @click="cancelDanger">
             {{ $t("containers.cancelDelete") }}
           </button>
-          <button class="delete-btn" @click="confirmDelete">
-            {{ $t("containers.confirmDeleteAction") }}
+          <button class="delete-btn" @click="confirmDanger">
+            {{ $t(`containers.${dangerCopyKey(pendingDanger.action)}Action`) }}
           </button>
         </div>
       </section>
@@ -272,10 +346,18 @@ async function handleToggle(instance: {
 .card-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 /* ======= 右侧按钮组件 ======= */
+.compact-btn {
+  min-height: 32px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+
 .delete-btn {
   padding: 6px 16px;
   background-color: var(--danger-light);
@@ -293,6 +375,23 @@ async function handleToggle(instance: {
   box-shadow: 1px 1px 0 0 rgba(255, 77, 79, 0.5);
   background-color: var(--danger);
   color: var(--text-on-dark);
+}
+
+.danger-outline-btn {
+  background: var(--card-bg);
+  color: var(--danger);
+  border: 2px solid var(--danger);
+  border-radius: 0;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 0 rgba(255, 77, 79, 0.35);
+  transition: all 0.2s;
+}
+
+.danger-outline-btn:hover {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 0 rgba(255, 77, 79, 0.35);
+  background: var(--danger-light);
 }
 
 .modal-overlay {
@@ -352,6 +451,14 @@ async function handleToggle(instance: {
   border-radius: 0;
   font-weight: bold;
   cursor: pointer;
+  box-shadow: 2px 2px 0 0 var(--create-border-outer);
+  transition: all 0.2s;
+}
+
+.secondary-btn:hover {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 0 var(--create-border-outer);
+  background: var(--hover-lighten);
 }
 
 /* ======= 拉杆样式的开关 ======= */

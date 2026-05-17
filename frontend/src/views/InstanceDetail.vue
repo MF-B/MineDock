@@ -9,11 +9,21 @@ import InstanceFiles from "./InstanceFiles.vue";
 import InstanceMonitor from "./InstanceMonitor.vue";
 
 type DetailTab = "console" | "config" | "files" | "monitor";
+type DetailAction = "delete" | "force-stop" | "force-delete";
+type ActionCopyKey = "delete" | "forceStop" | "forceDelete";
 
 const route = useRoute();
 const router = useRouter();
 const { t } = useI18n();
 const store = useContainerStore();
+const pendingAction = ref<DetailAction | null>(null);
+const purgeData = ref(false);
+
+const actionCopyKeys: Partial<Record<DetailAction, ActionCopyKey>> = {
+  delete: "delete",
+  "force-stop": "forceStop",
+  "force-delete": "forceDelete",
+};
 
 const loading = ref(true);
 const containerId = ref("");
@@ -99,6 +109,73 @@ function backToList(): void {
   void router.push({ name: "ContainerList" });
 }
 
+function actionCopyKey(action: DetailAction): ActionCopyKey {
+  return actionCopyKeys[action] ?? "delete";
+}
+
+function openAction(action: DetailAction): void {
+  pendingAction.value = action;
+  purgeData.value = false;
+}
+
+function cancelAction(): void {
+  pendingAction.value = null;
+  purgeData.value = false;
+}
+
+async function confirmAction(): Promise<void> {
+  const action = pendingAction.value;
+  if (!action || !currentInstance.value) return;
+
+  const instance = currentInstance.value;
+  const purge = purgeData.value;
+  cancelAction();
+
+  if (action === "force-stop") {
+    store.print(t("status.forceStopping", { name: instance.name }));
+    const success = await store.forceStop(instance);
+    if (success) {
+      store.print(t("status.forceStopSuccess", { name: instance.name }));
+    }
+    return;
+  }
+
+  if (action === "delete") {
+    store.print(t("status.deleting"));
+    const success = await store.remove(instance.container_id, purge);
+    if (success) {
+      backToList();
+    }
+    return;
+  }
+
+  store.print(t("status.forceDeleting", { name: instance.name }));
+  const success = await store.forceRemove(instance.container_id, purge);
+  if (success) {
+    backToList();
+  }
+}
+
+async function handleRestart(): Promise<void> {
+  if (!currentInstance.value) return;
+  const instance = currentInstance.value;
+  store.print(t("status.restarting", { name: instance.name }));
+  const success = await store.restart(instance);
+  if (success) {
+    store.print(t("status.restartSuccess", { name: instance.name }));
+  }
+}
+
+async function handleStart(): Promise<void> {
+  if (!currentInstance.value) return;
+  const instance = currentInstance.value;
+  store.print(t("status.starting", { name: instance.name }));
+  const success = await store.toggle(instance);
+  if (success) {
+    store.print(t("status.startSuccess", { name: instance.name }));
+  }
+}
+
 watch(
   () => route.params.id,
   () => {
@@ -145,7 +222,35 @@ onUnmounted(() => {
       </button>
     </div>
     <h1 class="page-title">{{ containerName }}</h1>
-    <div class="header-right"></div>
+    <div class="header-right">
+      <template v-if="currentInstance && store.isRunning(currentInstance.status)">
+        <button class="secondary-btn header-action-btn" type="button" @click="handleRestart">
+          {{ $t("containers.restart") }}
+        </button>
+        <button
+          class="danger-outline-btn header-action-btn"
+          type="button"
+          @click="openAction('force-stop')"
+        >
+          {{ $t("containers.forceStop") }}
+        </button>
+        <button
+          class="delete-btn header-action-btn"
+          type="button"
+          @click="openAction('force-delete')"
+        >
+          {{ $t("containers.forceDelete") }}
+        </button>
+      </template>
+      <template v-else-if="currentInstance">
+        <button class="secondary-btn header-action-btn" type="button" @click="handleStart">
+          {{ $t("containers.start") }}
+        </button>
+        <button class="delete-btn header-action-btn" type="button" @click="openAction('delete')">
+          {{ $t("containers.delete") }}
+        </button>
+      </template>
+    </div>
   </header>
 
   <main class="main-content">
@@ -215,6 +320,30 @@ onUnmounted(() => {
       <div class="error-text">{{ displayError }}</div>
     </footer>
   </main>
+
+  <div v-if="pendingAction" class="modal-overlay" @click.self="cancelAction">
+    <section class="delete-dialog" role="dialog" aria-modal="true">
+      <h2 class="dialog-title">{{ $t(`containers.${actionCopyKey(pendingAction)}Title`) }}</h2>
+      <p class="dialog-message">
+        {{ $t(`containers.${actionCopyKey(pendingAction)}Message`, { name: containerName }) }}
+      </p>
+      <label
+        v-if="pendingAction === 'delete' || pendingAction === 'force-delete'"
+        class="purge-option"
+      >
+        <input v-model="purgeData" type="checkbox" />
+        <span>{{ $t("containers.confirmPurgeData") }}</span>
+      </label>
+      <div class="dialog-actions">
+        <button class="secondary-btn" @click="cancelAction">
+          {{ $t("containers.cancelDelete") }}
+        </button>
+        <button class="delete-btn" @click="confirmAction">
+          {{ $t(`containers.${actionCopyKey(pendingAction)}Action`) }}
+        </button>
+      </div>
+    </section>
+  </div>
 </template>
 
 <style scoped>
@@ -234,6 +363,10 @@ onUnmounted(() => {
 
 .header-right {
   justify-self: end;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .back-btn {
@@ -254,6 +387,61 @@ onUnmounted(() => {
   transform: translate(1px, 1px);
   box-shadow: 1px 1px 0 0 var(--create-border-outer);
   background: var(--hover-lighten);
+}
+
+.header-action-btn {
+  min-height: 32px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+
+.secondary-btn,
+.delete-btn,
+.danger-outline-btn {
+  border-radius: 0;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.secondary-btn {
+  background-color: var(--card-bg);
+  color: var(--card-text);
+  border: 2px solid var(--card-border);
+  box-shadow: 2px 2px 0 0 var(--create-border-outer);
+}
+
+.secondary-btn:hover {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 0 var(--create-border-outer);
+  background: var(--hover-lighten);
+}
+
+.delete-btn {
+  background-color: var(--danger-light);
+  color: var(--danger);
+  border: 2px solid var(--danger);
+  box-shadow: 2px 2px 0 0 rgba(255, 77, 79, 0.5);
+}
+
+.delete-btn:hover {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 0 rgba(255, 77, 79, 0.5);
+  background-color: var(--danger);
+  color: var(--text-on-dark);
+}
+
+.danger-outline-btn {
+  background: var(--card-bg);
+  color: var(--danger);
+  border: 2px solid var(--danger);
+  box-shadow: 2px 2px 0 0 rgba(255, 77, 79, 0.35);
+}
+
+.danger-outline-btn:hover {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 0 rgba(255, 77, 79, 0.35);
+  background: var(--danger-light);
 }
 
 .page-title {
@@ -378,6 +566,60 @@ onUnmounted(() => {
   font-size: 13px;
   text-align: right;
   font-weight: 500;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.delete-dialog {
+  width: min(420px, 100%);
+  padding: 20px;
+  background: var(--card-bg);
+  border: 3px solid var(--card-border);
+  box-shadow:
+    inset 0 3px 0 0 var(--card-bg),
+    inset 0 -3px 0 0 var(--card-bg),
+    inset 0 6px 0 0 var(--card-border-inner),
+    inset 0 -6px 0 0 var(--card-border-inner);
+}
+
+.dialog-title {
+  margin: 0 0 12px;
+  color: var(--card-text);
+  font-size: 16px;
+}
+
+.dialog-message {
+  margin: 0 0 16px;
+  color: var(--text-muted);
+}
+
+.purge-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  color: var(--card-text);
+  font-weight: bold;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.dialog-actions .secondary-btn,
+.dialog-actions .delete-btn {
+  padding: 6px 16px;
 }
 
 @media (max-width: 1023px) {

@@ -23,7 +23,10 @@ type InstanceService interface {
 	) (string, error)
 	StartInstance(ctx context.Context, containerID string) error
 	StopInstance(ctx context.Context, containerID string) error
+	RestartInstance(ctx context.Context, containerID string) error
+	ForceStopInstance(ctx context.Context, containerID string) error
 	DeleteInstance(ctx context.Context, containerID string, purgeData bool) error
+	ForceDeleteInstance(ctx context.Context, containerID string, purgeData bool) error
 }
 
 // Handler 暴露 HTTP 处理器。
@@ -132,6 +135,38 @@ func (h *Handler) StopInstance(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, statusResponse{Status: "success"})
 }
 
+// RestartInstance 处理 POST /api/instances/{id}/restart 并重启实例。
+func (h *Handler) RestartInstance(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathContainerID(r)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, statusResponse{Status: "error", Error: "invalid container id"})
+		return
+	}
+
+	if err := h.svc.RestartInstance(r.Context(), id); err != nil {
+		writeJSON(w, mapErrorCode(err), statusResponse{Status: "error", Error: err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, statusResponse{Status: "success"})
+}
+
+// ForceStopInstance 处理 POST /api/instances/{id}/force-stop 并强制停止实例。
+func (h *Handler) ForceStopInstance(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathContainerID(r)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, statusResponse{Status: "error", Error: "invalid container id"})
+		return
+	}
+
+	if err := h.svc.ForceStopInstance(r.Context(), id); err != nil {
+		writeJSON(w, mapErrorCode(err), statusResponse{Status: "error", Error: err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, statusResponse{Status: "success"})
+}
+
 // DeleteInstance 处理 DELETE /api/instances/{id} 并删除实例。
 func (h *Handler) DeleteInstance(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathContainerID(r)
@@ -140,14 +175,9 @@ func (h *Handler) DeleteInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	purgeData := false
-	if raw := strings.TrimSpace(r.URL.Query().Get("purge_data")); raw != "" {
-		parsed, err := strconv.ParseBool(raw)
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, statusResponse{Status: "error", Error: "invalid purge_data"})
-			return
-		}
-		purgeData = parsed
+	purgeData, ok := parsePurgeDataQuery(w, r)
+	if !ok {
+		return
 	}
 
 	if err := h.svc.DeleteInstance(r.Context(), id, purgeData); err != nil {
@@ -156,6 +186,40 @@ func (h *Handler) DeleteInstance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, statusResponse{Status: "success"})
+}
+
+// ForceDeleteInstance 处理 DELETE /api/instances/{id}/force-delete 并强制删除实例。
+func (h *Handler) ForceDeleteInstance(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathContainerID(r)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, statusResponse{Status: "error", Error: "invalid container id"})
+		return
+	}
+
+	purgeData, ok := parsePurgeDataQuery(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.svc.ForceDeleteInstance(r.Context(), id, purgeData); err != nil {
+		writeJSON(w, mapErrorCode(err), statusResponse{Status: "error", Error: err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, statusResponse{Status: "success"})
+}
+
+func parsePurgeDataQuery(w http.ResponseWriter, r *http.Request) (bool, bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get("purge_data"))
+	if raw == "" {
+		return false, true
+	}
+	parsed, err := strconv.ParseBool(raw)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, statusResponse{Status: "error", Error: "invalid purge_data"})
+		return false, false
+	}
+	return parsed, true
 }
 
 // pathContainerID 解析并校验 URL 路径中的容器 ID。
@@ -193,6 +257,8 @@ func mapErrorCode(err error) int {
 	case errors.Is(err, model.ErrNameExists):
 		return http.StatusConflict
 	case errors.Is(err, model.ErrInstanceRunning):
+		return http.StatusConflict
+	case errors.Is(err, model.ErrInstanceNotRunning):
 		return http.StatusConflict
 	case errors.Is(err, model.ErrContainerNotStopped):
 		return http.StatusConflict

@@ -30,7 +30,10 @@ func NewRouter(
 	mux.HandleFunc("POST /api/instances", h.CreateInstance)
 	mux.HandleFunc("POST /api/instances/{id}/start", h.StartInstance)
 	mux.HandleFunc("POST /api/instances/{id}/stop", h.StopInstance)
+	mux.HandleFunc("POST /api/instances/{id}/restart", h.RestartInstance)
+	mux.HandleFunc("POST /api/instances/{id}/force-stop", h.ForceStopInstance)
 	mux.HandleFunc("DELETE /api/instances/{id}", h.DeleteInstance)
+	mux.HandleFunc("DELETE /api/instances/{id}/force-delete", h.ForceDeleteInstance)
 	if config != nil {
 		mux.HandleFunc("GET /api/instances/{id}/config", config.HandleGetConfig)
 		mux.HandleFunc("PUT /api/instances/{id}/config", config.HandleUpdateConfig)

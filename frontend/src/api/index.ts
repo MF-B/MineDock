@@ -350,9 +350,28 @@ export function stopInstance(containerId: string): Promise<unknown> {
   });
 }
 
+export function restartInstance(containerId: string): Promise<unknown> {
+  return request(`/instances/${encodeURIComponent(containerId)}/restart`, {
+    method: "POST",
+  });
+}
+
+export function forceStopInstance(containerId: string): Promise<unknown> {
+  return request(`/instances/${encodeURIComponent(containerId)}/force-stop`, {
+    method: "POST",
+  });
+}
+
 export function deleteInstance(containerId: string, purgeData = false): Promise<unknown> {
   const query = purgeData ? "?purge_data=true" : "";
   return request(`/instances/${containerId}${query}`, {
+    method: "DELETE",
+  });
+}
+
+export function forceDeleteInstance(containerId: string, purgeData = false): Promise<unknown> {
+  const query = purgeData ? "?purge_data=true" : "";
+  return request(`/instances/${encodeURIComponent(containerId)}/force-delete${query}`, {
     method: "DELETE",
   });
 }

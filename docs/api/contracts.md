@@ -196,12 +196,53 @@
 { "status": "success" }
 ```
 
+### POST /api/instances/:id/restart
+
+- 说明：重启运行中的指定容器实例。重启在原容器上执行，不重建容器，`container_id` 保持不变。
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（ID非法）、`409`（实例未运行）、`500`
+- 请求参数：无（ID 在路径中）
+- 返回结果：
+
+```json
+{ "status": "success" }
+```
+
+### POST /api/instances/:id/force-stop
+
+- 说明：强制停止指定容器实例。运行中实例会发送 `SIGKILL`；已停止实例作为幂等成功处理。
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（ID非法）、`500`
+- 请求参数：无（ID 在路径中）
+- 返回结果：
+
+```json
+{ "status": "success" }
+```
+
 ### DELETE /api/instances/:id
 
 - 说明：彻底删除指定容器实例
 - 状态码：
   - 成功：`200`
   - 失败：`400`（ID非法）、`409`（实例运行中）、`500`
+- 请求参数：
+  - 路径参数：`id`（容器 ID）
+  - 可选 query：`purge_data=true|false`，为 `true` 时删除实例的宿主机数据目录（默认 `false`）
+- 返回结果：
+
+```json
+{ "status": "success" }
+```
+
+### DELETE /api/instances/:id/force-delete
+
+- 说明：强制删除指定容器实例，允许删除运行中实例和 Docker 已不存在但 MineDock 仍有记录的异常残留实例。
+- 状态码：
+  - 成功：`200`
+  - 失败：`400`（ID非法或 `purge_data` 非法）、`500`
 - 请求参数：
   - 路径参数：`id`（容器 ID）
   - 可选 query：`purge_data=true|false`，为 `true` 时删除实例的宿主机数据目录（默认 `false`）

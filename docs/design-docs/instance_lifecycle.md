@@ -56,7 +56,11 @@ stateDiagram-v2
     [*] --> Stopped: Create
     Stopped --> Running: Start
     Running --> Stopped: Stop
+    Running --> Running: Restart
+    Running --> Stopped: Force Stop
     Stopped --> [*]: Delete
+    Running --> [*]: Force Delete
+    Stopped --> [*]: Force Delete
 ```
 
 ## 创建配置注入
@@ -76,6 +80,14 @@ stateDiagram-v2
 - 保留策略：按实例名称复用 bind mount 宿主机目录，并应用最新模板卷配置。
 - 标识变化：重建后 `container_id` 会变化，前端需跳转到新的详情路由。
 - 漂移处理：若用户绕过 MineDock 修改 Docker 容器，下一次面板保存并重建会以 `minedock.instance.json` 覆盖 Docker 实际状态。
+
+## 运维控制操作
+
+- 重启：仅允许运行中实例执行，调用 Docker restart；该操作不应用配置重建，`container_id` 保持不变。
+- 普通停止：调用 Docker stop 并保留 10 秒正常退出窗口，适合常规关闭。
+- 强制停止：运行中实例调用 Docker kill 并发送 `SIGKILL`；已停止实例按幂等成功处理。
+- 普通删除：继续拒绝运行中实例，避免误删正在服务的容器。
+- 强制删除：使用 Docker remove force，允许回收运行中实例和 Docker 容器已丢失但 SQLite 记录仍存在的异常残留；传入 `purge_data=true` 时按实例名清理宿主机数据目录。
 
 ## 一致性策略
 
@@ -97,4 +109,5 @@ stateDiagram-v2
 - 创建流程：若数据库保存失败，立即强制删除刚创建容器。
 - 启停流程：Docker 操作成功但 DB 更新失败时，接口返回错误；后续列表刷新会将状态重新收敛。
 - 删除流程：Docker 删除成功后若 DB 删除失败，后续列表会因 Docker 不存在而清理状态。
+- 异常回收：强制删除遇到 Docker `not found` 时仍会删除 SQLite 记录；如果记录中保留实例名，仍可继续清理数据目录。
 - 数据卷策略：删除实例默认保留宿主机数据目录；传入 `purge_data=true` 时同步删除实例数据目录。

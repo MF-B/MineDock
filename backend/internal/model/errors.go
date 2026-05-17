@@ -8,6 +8,9 @@ var ErrNameExists = errors.New("instance name already exists")
 // ErrInstanceRunning 表示实例正在运行，删除前必须先停止。
 var ErrInstanceRunning = errors.New("instance is running, stop it before delete")
 
+// ErrInstanceNotRunning 表示实例未运行，无法执行需要运行态的操作。
+var ErrInstanceNotRunning = errors.New("instance is not running")
+
 // ErrGameNotFound 表示请求的游戏 ID 不在目录中。
 var ErrGameNotFound = errors.New("game not found")
 

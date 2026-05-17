@@ -114,7 +114,7 @@ func (h *EventHub) runOnce(ctx context.Context) (bool, error) {
 	args := filters.NewArgs()
 	args.Add("type", "container")
 	args.Add("label", managedLabelKey+"="+managedLabelValue)
-	for _, action := range []string{"start", "stop", "die", "destroy", "kill"} {
+	for _, action := range []string{"start", "stop", "die", "destroy", "kill", "restart"} {
 		args.Add("event", action)
 	}
 

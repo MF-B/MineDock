@@ -13,6 +13,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/errdefs"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"minedock/backend/internal/model"
@@ -41,6 +42,8 @@ type dockerClient interface {
 	ContainerRemove(ctx context.Context, containerID string, options container.RemoveOptions) error
 	ContainerStart(ctx context.Context, containerID string, options container.StartOptions) error
 	ContainerStop(ctx context.Context, containerID string, options container.StopOptions) error
+	ContainerRestart(ctx context.Context, containerID string, options container.StopOptions) error
+	ContainerKill(ctx context.Context, containerID, signal string) error
 	ContainerList(ctx context.Context, options container.ListOptions) ([]container.Summary, error)
 	ImageList(ctx context.Context, options image.ListOptions) ([]image.Summary, error)
 	ImagePull(ctx context.Context, ref string, options image.PullOptions) (io.ReadCloser, error)
@@ -458,6 +461,62 @@ func (s *DockerService) StopInstance(ctx context.Context, containerID string) er
 	return nil
 }
 
+// RestartInstance 重启运行中的托管容器并保持容器 ID 不变。
+func (s *DockerService) RestartInstance(ctx context.Context, containerID string) error {
+	inspect, err := s.cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return fmt.Errorf("inspect container: %w", err)
+	}
+	if inspect.State == nil || !inspect.State.Running {
+		slog.Warn("restart stopped instance rejected", "container_id", containerID)
+		return model.ErrInstanceNotRunning
+	}
+
+	timeout := 10
+	if err := s.cli.ContainerRestart(ctx, containerID, container.StopOptions{Timeout: &timeout}); err != nil {
+		slog.Error("restart instance failed", "container_id", containerID, "error", err)
+		return fmt.Errorf("restart container: %w", err)
+	}
+
+	inst, err := s.readInstance(ctx, containerID, "Running")
+	if err != nil {
+		return err
+	}
+	if err := s.store.Save(ctx, inst); err != nil {
+		slog.Error("save restarted instance state failed", "container_id", containerID, "error", err)
+		return fmt.Errorf("save instance state: %w", err)
+	}
+
+	slog.Info("instance restarted", "container_id", containerID, "name", inst.Name, "game_id", inst.GameID)
+	return nil
+}
+
+// ForceStopInstance 使用 SIGKILL 强制终止运行中的托管容器。
+func (s *DockerService) ForceStopInstance(ctx context.Context, containerID string) error {
+	inspect, err := s.cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return fmt.Errorf("inspect container: %w", err)
+	}
+	if inspect.State != nil && inspect.State.Running {
+		if err := s.cli.ContainerKill(ctx, containerID, "SIGKILL"); err != nil {
+			slog.Error("force stop instance failed", "container_id", containerID, "error", err)
+			return fmt.Errorf("kill container: %w", err)
+		}
+	}
+
+	inst, err := s.readInstance(ctx, containerID, "Stopped")
+	if err != nil {
+		return err
+	}
+	if err := s.store.Save(ctx, inst); err != nil {
+		slog.Error("save force stopped instance state failed", "container_id", containerID, "error", err)
+		return fmt.Errorf("save instance state: %w", err)
+	}
+
+	slog.Info("instance force stopped", "container_id", containerID, "name", inst.Name, "game_id", inst.GameID)
+	return nil
+}
+
 // ListInstances 列出托管容器并将快照元数据同步到存储层。
 // TODO: 将逐条 Save 改为批量或事务化同步路径。
 // TODO: 增加并发写保护，避免最后写入覆盖前写入。
@@ -535,6 +594,47 @@ func (s *DockerService) DeleteInstance(ctx context.Context, containerID string, 
 		return purgeErr
 	}
 	slog.Info("instance deleted", "container_id", containerID, "name", instanceName, "purge_data", purgeData)
+	return nil
+}
+
+// ForceDeleteInstance 强制删除托管容器及其持久化记录，允许回收异常残留。
+func (s *DockerService) ForceDeleteInstance(ctx context.Context, containerID string, purgeData bool) error {
+	instanceName := containerID
+	if inst, ok, err := s.store.Get(ctx, containerID); err != nil {
+		return fmt.Errorf("read instance: %w", err)
+	} else if ok && strings.TrimSpace(inst.Name) != "" {
+		instanceName = inst.Name
+	}
+
+	inspect, err := s.cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		if !errdefs.IsNotFound(err) {
+			return fmt.Errorf("inspect container: %w", err)
+		}
+	} else {
+		instanceName = instanceNameFromInspect(inspect, instanceName)
+	}
+
+	if err := s.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); err != nil {
+		if !errdefs.IsNotFound(err) {
+			slog.Error("force remove instance container failed", "container_id", containerID, "name", instanceName, "error", err)
+			return fmt.Errorf("remove container: %w", err)
+		}
+	}
+
+	var purgeErr error
+	if purgeData {
+		purgeErr = s.removeInstanceData(instanceName)
+	}
+	if err := s.store.Delete(ctx, containerID); err != nil {
+		slog.Error("delete force removed instance record failed", "container_id", containerID, "name", instanceName, "error", err)
+		return fmt.Errorf("delete instance record: %w", err)
+	}
+	if purgeErr != nil {
+		slog.Error("purge force removed instance data failed", "container_id", containerID, "name", instanceName, "error", purgeErr)
+		return purgeErr
+	}
+	slog.Info("instance force deleted", "container_id", containerID, "name", instanceName, "purge_data", purgeData)
 	return nil
 }
 

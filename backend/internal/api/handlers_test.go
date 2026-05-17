@@ -22,9 +22,12 @@ type mockService struct {
 		ports []model.PortMapping,
 		resources *model.ResourceLimits,
 	) (string, error)
-	startFn  func(ctx context.Context, id string) error
-	stopFn   func(ctx context.Context, id string) error
-	deleteFn func(ctx context.Context, id string, purgeData bool) error
+	startFn       func(ctx context.Context, id string) error
+	stopFn        func(ctx context.Context, id string) error
+	restartFn     func(ctx context.Context, id string) error
+	forceStopFn   func(ctx context.Context, id string) error
+	deleteFn      func(ctx context.Context, id string, purgeData bool) error
+	forceDeleteFn func(ctx context.Context, id string, purgeData bool) error
 }
 
 func (m *mockService) ListInstances(ctx context.Context) ([]model.Instance, error) {
@@ -45,8 +48,17 @@ func (m *mockService) StartInstance(ctx context.Context, id string) error {
 func (m *mockService) StopInstance(ctx context.Context, id string) error {
 	return m.stopFn(ctx, id)
 }
+func (m *mockService) RestartInstance(ctx context.Context, id string) error {
+	return m.restartFn(ctx, id)
+}
+func (m *mockService) ForceStopInstance(ctx context.Context, id string) error {
+	return m.forceStopFn(ctx, id)
+}
 func (m *mockService) DeleteInstance(ctx context.Context, id string, purgeData bool) error {
 	return m.deleteFn(ctx, id, purgeData)
+}
+func (m *mockService) ForceDeleteInstance(ctx context.Context, id string, purgeData bool) error {
+	return m.forceDeleteFn(ctx, id, purgeData)
 }
 
 type mockRegistryLister struct {
@@ -444,6 +456,64 @@ func TestStopInstance_Success(t *testing.T) {
 	}
 }
 
+// --- POST /api/instances/{id}/restart 场景 ---
+
+func TestRestartInstance_Success(t *testing.T) {
+	router := newTestRouter(&mockService{
+		restartFn: func(_ context.Context, id string) error {
+			if id != "abc123" {
+				t.Fatalf("unexpected id: %s", id)
+			}
+			return nil
+		},
+	})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/instances/abc123/restart", nil)
+	router.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRestartInstance_NotRunning(t *testing.T) {
+	router := newTestRouter(&mockService{
+		restartFn: func(_ context.Context, _ string) error {
+			return model.ErrInstanceNotRunning
+		},
+	})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/instances/abc123/restart", nil)
+	router.ServeHTTP(w, r)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", w.Code)
+	}
+}
+
+// --- POST /api/instances/{id}/force-stop 场景 ---
+
+func TestForceStopInstance_Success(t *testing.T) {
+	router := newTestRouter(&mockService{
+		forceStopFn: func(_ context.Context, id string) error {
+			if id != "abc123" {
+				t.Fatalf("unexpected id: %s", id)
+			}
+			return nil
+		},
+	})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/instances/abc123/force-stop", nil)
+	router.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 // --- DELETE /api/instances/{id} 场景 ---
 
 func TestDeleteInstance_Success(t *testing.T) {
@@ -506,6 +576,52 @@ func TestDeleteInstance_Running(t *testing.T) {
 	}
 }
 
+// --- DELETE /api/instances/{id}/force-delete 场景 ---
+
+func TestForceDeleteInstance_Success(t *testing.T) {
+	router := newTestRouter(&mockService{
+		forceDeleteFn: func(_ context.Context, id string, purgeData bool) error {
+			if id != "abc123" {
+				t.Fatalf("unexpected id: %s", id)
+			}
+			if purgeData {
+				t.Fatal("expected purgeData=false")
+			}
+			return nil
+		},
+	})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodDelete, "/api/instances/abc123/force-delete", nil)
+	router.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestForceDeleteInstance_PurgeData(t *testing.T) {
+	router := newTestRouter(&mockService{
+		forceDeleteFn: func(_ context.Context, id string, purgeData bool) error {
+			if id != "abc123" {
+				t.Fatalf("unexpected id: %s", id)
+			}
+			if !purgeData {
+				t.Fatal("expected purgeData=true")
+			}
+			return nil
+		},
+	})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodDelete, "/api/instances/abc123/force-delete?purge_data=true", nil)
+	router.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 // errTest 是测试桩使用的通用错误。
 var errTest = errorString("test error")
 
@@ -540,5 +656,11 @@ func TestMapErrorCode_InvalidParamsWrapped(t *testing.T) {
 func TestMapErrorCode_ContainerNotStopped(t *testing.T) {
 	if got := mapErrorCode(model.ErrContainerNotStopped); got != http.StatusConflict {
 		t.Fatalf("expected 409 for container-not-stopped, got %d", got)
+	}
+}
+
+func TestMapErrorCode_InstanceNotRunning(t *testing.T) {
+	if got := mapErrorCode(model.ErrInstanceNotRunning); got != http.StatusConflict {
+		t.Fatalf("expected 409 for instance-not-running, got %d", got)
 	}
 }
